@@ -14,7 +14,7 @@ hr { margin: 48px 0; border: none; border-top: 1px solid color-mix(in srgb, Canv
 </style>
 </head>
 <body>
-<!-- 发布脚本会替换双花括号里的占位（发布者、联系方式、生效日期、适用法律）；正式发布前请让律师看一遍 -->
+<!-- 发布脚本会替换双花括号里的占位（发布者、联系方式、生效日期、适用法律）；没给适用法律时 LAW 标记之间的那句整句去掉。正式发布前请让律师看一遍 -->
 
 <h1>壁坞 使用条款</h1>
 <p class="meta">发布者：{{PUBLISHER}} · 联系方式：{{CONTACT}} · 生效日期：{{EFFECTIVE_DATE}}</p>
@@ -65,8 +65,8 @@ Wallpaper Engine 的自带素材，是你登录后本软件用<b>你的</b> Stea
 <h2>9. 更新和终止</h2>
 <p>发布者可以随时更新本软件或这些条款，新的条款随新版本发布。你可以随时停止使用并删除本软件。</p>
 
-<h2>10. 适用法律</h2>
-<p>本条款适用 {{GOVERNING_LAW}} 的法律。如果某一条无效，不影响其他条款的效力。有问题请联系：{{CONTACT}}。</p>
+<h2>10. 其他</h2>
+<p><!--LAW-->本条款适用 {{GOVERNING_LAW}} 的法律。<!--/LAW-->如果某一条无效，不影响其他条款的效力。有问题请联系：{{CONTACT}}。</p>
 
 <hr>
 
@@ -119,8 +119,8 @@ Some jurisdictions do not allow certain exclusions; in that case the limitations
 <h2>9. Updates and termination</h2>
 <p>The publisher may update the Software or these terms at any time; new terms are published with new versions. You may stop using and delete the Software at any time.</p>
 
-<h2>10. Governing law</h2>
-<p>These terms are governed by the laws of {{GOVERNING_LAW}}. If any provision is invalid, the rest remain in effect. Questions: {{CONTACT}}.</p>
+<h2>10. Miscellaneous</h2>
+<p><!--LAW-->These terms are governed by the laws of {{GOVERNING_LAW}}. <!--/LAW-->If any provision is invalid, the rest remain in effect. Questions: {{CONTACT}}.</p>
 </div>
 </body>
 </html>

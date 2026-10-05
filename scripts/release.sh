@@ -2,7 +2,7 @@
 # 发布用的打包：签名 + Hardened Runtime +（有证书时）苹果公证 + .dmg，产物放在 build/release，
 # 然后用 scripts/publish-github.sh 发到 GitHub Releases（开发时用 build-app.sh）。
 #
-#   BUNDLE_ID=io.github.你的用户名.wallport VERSION=1.0.0 GOVERNING_LAW="中华人民共和国" scripts/release.sh
+#   BUNDLE_ID=io.github.你的用户名.wallport VERSION=1.0.0 scripts/release.sh
 #
 # 有 Apple 开发者证书时再加上（别人下载后打开不会被 macOS 拦）：
 #   SIGN_IDENTITY="Developer ID Application: 你的名字 (TEAMID)" NOTARY_PROFILE=wallport
@@ -20,8 +20,8 @@
 #                   "访问壁坞网站""反馈问题…"默认打开仓库主页和 Issues
 #   PUBLISHER       发布者（个人名字、GitHub 用户名或公司名），写进隐私政策、使用条款和版权信息；默认是仓库所属的用户名
 #   CONTACT         联系方式（邮箱或网址），写进隐私政策和使用条款；默认是仓库的 Issues 页面
-#   GOVERNING_LAW   使用条款的适用法律（例如"中华人民共和国"）
-#                   ——这三项在正式签名（设置了 SIGN_IDENTITY）时必须有，免得把带占位的条款发出去
+#   GOVERNING_LAW   使用条款的适用法律（例如"中华人民共和国"）；不填时条款里不写这一句
+#                   ——发布者、联系方式在发到 GitHub（认出了仓库）或正式签名时必须有，免得把带占位的条款发出去
 #   COPYRIGHT       "关于"窗口里的版权行；默认"© 今年 PUBLISHER"
 #   WEBSITE_URL     项目主页（https），不填就是 GitHub 仓库页
 #   SUPPORT_URL     反馈问题的地址（https 网页或 mailto:），不填就是 GitHub 仓库的 Issues
@@ -94,7 +94,7 @@ cp -R App/CompatFonts "$app/Contents/Resources/"
 cp App/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 GITHUB_REPO="${GITHUB_REPO:-}" scripts/make-credits.sh "$app/Contents/Resources/Credits.html"
 # 隐私政策、使用条款：正式签名时发布者、联系方式、适用法律必须填好
-if [ "$identity" = "-" ]; then
+if [ "$identity" = "-" ] && [ -z "${GITHUB_REPO:-}" ]; then
     scripts/fill-legal.sh "$app/Contents/Resources/Legal"
 else
     scripts/fill-legal.sh "$app/Contents/Resources/Legal" --strict
