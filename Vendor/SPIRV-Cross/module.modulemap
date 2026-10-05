@@ -1,0 +1,5 @@
+// C 接口（spirv_cross_c.h）；库内部的 .hpp 不进模块。
+module SPIRVCross [system] {
+    header "spirv_cross_c.h"
+    export *
+}

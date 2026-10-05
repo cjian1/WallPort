@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>WallPort</string>
+	<key>CFBundleExecutable</key>
+	<string>WallPort</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>local.macwallpaper</string>
+	<key>CFBundleName</key>
+	<string>WallPort</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.0.1</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.entertainment</string>
+	<key>LSHasLocalizedDisplayName</key>
+	<true/>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.6</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Music-reactive wallpapers read the spectrum of the sound your Mac is playing (only while such a wallpaper is playing; nothing is recorded or saved).</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>WallPort reads the wallpapers you keep in this folder so it can show them on your desktop.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>WallPort reads the wallpapers you keep in this folder so it can show them on your desktop.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>WallPort reads the wallpapers you keep in this folder so it can show them on your desktop.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>WallPort</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>WallPort reads the wallpapers you keep on network drives so it can show them on your desktop.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>WallPort reads the wallpapers you keep on external drives so it can show them on your desktop.</string>
+</dict>
+</plist>

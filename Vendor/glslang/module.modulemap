@@ -1,0 +1,7 @@
+// 只把 C 接口暴露给 Swift。库本身的头文件大量是 C++（<string>、<atomic> 之类），
+// 全丢进模块会让 Swift 的 Clang 导入器去当 C 解析，所以这里手写模块映射，只列需要的。
+module glslang [system] {
+    header "glslang/Include/glslang_c_interface.h"
+    header "glslang/Public/resource_limits_c.h"
+    export *
+}

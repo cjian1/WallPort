@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 安全问题 / Security issue
+    url: https://docs.github.com/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability
+    about: 涉及登录凭证等安全问题请私下报告（仓库的 Security 页 → Report a vulnerability），不要公开提 Issue / Report security problems privately via the Security tab

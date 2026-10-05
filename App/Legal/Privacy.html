@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>壁坞 WallPort — 隐私政策 / Privacy Policy</title>
+<style>
+:root { color-scheme: light dark; }
+body { font: 15px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
+h1 { font-size: 26px; margin-bottom: 4px; }
+h2 { font-size: 19px; margin-top: 32px; }
+h3 { font-size: 16px; margin-top: 22px; }
+.meta { color: GrayText; font-size: 13px; }
+hr { margin: 48px 0; border: none; border-top: 1px solid color-mix(in srgb, CanvasText 20%, transparent); }
+code { font: 13px ui-monospace, Menlo, monospace; }
+</style>
+</head>
+<body>
+<!-- 发布脚本会替换双花括号里的占位（发布者、联系方式、生效日期）；正式发布前请让律师看一遍 -->
+
+<h1>壁坞 隐私政策</h1>
+<p class="meta">发布者：{{PUBLISHER}} · 联系方式：{{CONTACT}} · 生效日期：{{EFFECTIVE_DATE}}</p>
+
+<p><b>一句话：壁坞不收集你的任何个人信息，不向开发者发送任何数据。</b>没有统计、没有广告、没有自动的崩溃上报。
+你的设置、壁纸和登录凭证都只存在你自己的 Mac 上。下面逐项说明壁坞在本机存了什么、会连接哪些网络服务、要用哪些系统权限。</p>
+
+<h2>1. 存在你 Mac 上的东西</h2>
+<p>壁坞的所有文件都在主目录下的 <code>WallPort</code> 文件夹（<code>~/WallPort</code>）里：</p>
+<ul>
+<li><b>设置</b>（<code>Settings.plist</code>）：壁纸库文件夹、每块屏幕放的壁纸、性能和声音选项、筛选条件；上次登录用的 Steam 账户名称、你在 Steam 上订阅的条目编号和订阅时间（用来排序和显示"已订阅"）。</li>
+<li><b>Steam 登录凭证</b>（<code>Data/steam-session.json</code>）：登录成功后 Steam 发给壁坞的令牌，用这台 Mac 的硬件标识派生的密钥加密，文件只有你自己能读。<b>你的密码不会被保存</b>。在壁坞里"退出登录"会删除它。</li>
+<li><b>壁纸</b>：从创意工坊下载的壁纸（<code>Workshop/</code>）、你导入的 Wallpaper Engine 自带素材（<code>Assets/</code>）。</li>
+<li><b>缓存和截图</b>：缩略图、着色器、网页缓存（<code>Cache/</code>）；同步给系统壁纸用的当前画面截图（<code>Data/SystemWallpaper/</code>）。</li>
+<li><b>日志</b>（<code>Logs/</code>）：运行记录，里面可能有你的 Steam 账户名称和文件路径。日志只在本机，除非你自己导出发给别人。</li>
+</ul>
+<p>macOS 自己还会为每个 App 记一点东西（窗口位置、网页壁纸的 Cookie 等），放在系统的标准位置。</p>
+
+<h2>2. 会连接的网络服务</h2>
+<ul>
+<li><b>Steam（Valve）</b>：登录、读取你的订阅、订阅 / 取消订阅、下载壁纸时连接 Steam 的服务器（客户端协议服务器、<code>api.steampowered.com</code>）；
+浏览创意工坊时读取 <code>steamcommunity.com</code> 的公开浏览页和 Steam 的图片、内容服务器。这些请求直接发给 Steam，
+壁坞的开发者看不到。Valve 如何处理这些数据，请看 <a href="https://store.steampowered.com/privacy_agreement/">Steam 隐私政策</a>。</li>
+<li><b>检查更新</b>：壁坞启动后和之后每天一次，向 GitHub（<code>api.github.com</code>）读取本项目最新发布的版本信息；下载新版本也在 GitHub 上。
+这个请求只包含普通网络请求都有的信息（你的 IP 地址、壁坞的版本号），不包含任何账号或设备标识，由 GitHub 处理，发布者看不到，
+见 <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub 隐私声明</a>。可以在菜单栏图标里关掉"自动检查更新"。</li>
+<li><b>网页壁纸</b>：网页类壁纸是壁纸作者写的网页，可能会自己联网（例如取天气、字体）。可以在菜单栏图标里关掉"网页壁纸允许联网"。</li>
+<li>你点"在 Steam 上查看""忘记了账号或密码？"等链接时，会在浏览器里打开对应的网页。</li>
+</ul>
+
+<h2>3. 用到的系统权限</h2>
+<ul>
+<li><b>文件和文件夹</b>：读取你放在"文稿""下载"或外接盘上的壁纸时，macOS 会询问一次。</li>
+<li><b>系统音频录制</b>：只有"跟着音乐律动"的壁纸会用到——只读取正在播放的声音的频谱（各频段有多响），<b>不录音、不保存、不上传</b>。</li>
+<li><b>窗口位置</b>：为了在桌面被窗口挡住时暂停壁纸省电，壁坞会读取屏幕上各窗口的位置和层级，<b>不读取窗口内容和标题</b>，不需要"屏幕录制"权限。可以在"性能"菜单里关掉。</li>
+<li><b>系统壁纸</b>：开启"系统壁纸同步为当前画面"时，壁坞把当前画面设为系统壁纸（锁屏、调度中心时显示），退出时恢复你原来的壁纸。</li>
+<li><b>开机自动启动</b>：只在你打开这个选项时登记。</li>
+</ul>
+
+<h2>4. 导出诊断信息</h2>
+<p>"帮助 → 导出诊断信息…"会把概况（版本、系统、主要设置）、日志和壁坞的崩溃报告打包成一个 zip 存在你选的位置。
+导出前会去掉 Steam 账户名称和你的用户名，登录凭证和完整的设置文件不会打包。这个文件只有你决定发给谁才会离开你的 Mac。</p>
+
+<h2>5. 怎样删除全部数据</h2>
+<ol>
+<li>先退出壁坞（菜单栏图标 → 退出），它会恢复你原来的系统壁纸；</li>
+<li>把 <code>~/WallPort</code> 文件夹移到废纸篓；</li>
+<li>把"应用程序"里的壁坞移到废纸篓。</li>
+</ol>
+<p>你在 Steam 上的订阅保存在 Steam 那边，不受影响。</p>
+
+<h2>6. 儿童</h2>
+<p>壁坞不面向儿童。创意工坊里的"家长指导级""限制级"壁纸只有在你确认年满 18 岁之后才会显示。</p>
+
+<h2>7. 变更和联系</h2>
+<p>隐私政策如有变更，会随新版本一起发布并更新上面的生效日期。有问题请联系：{{CONTACT}}。</p>
+
+<hr>
+
+<h1 lang="en">WallPort Privacy Policy</h1>
+<p class="meta" lang="en">Publisher: {{PUBLISHER}} · Contact: {{CONTACT}} · Effective: {{EFFECTIVE_DATE}}</p>
+<div lang="en">
+<p><b>In short: WallPort does not collect any personal information and sends nothing to its developer.</b>
+There is no analytics, no advertising and no automatic crash reporting. Your settings, wallpapers and sign-in credentials stay on your Mac.</p>
+
+<h2>1. What is stored on your Mac</h2>
+<p>Everything WallPort keeps is in the <code>WallPort</code> folder in your home folder (<code>~/WallPort</code>):</p>
+<ul>
+<li><b>Settings</b> (<code>Settings.plist</code>): library folders, the wallpaper on each display, performance and sound options, filters; the Steam account name you last signed in with, and the IDs and subscription dates of the items you subscribe to on Steam.</li>
+<li><b>Steam sign-in credential</b> (<code>Data/steam-session.json</code>): the token Steam issues after you sign in, encrypted with a key derived from this Mac's hardware identifier and readable only by you. <b>Your password is never stored.</b> Signing out in WallPort deletes it.</li>
+<li><b>Wallpapers</b>: items downloaded from the Workshop (<code>Workshop/</code>) and the Wallpaper Engine assets you import (<code>Assets/</code>).</li>
+<li><b>Caches and snapshots</b>: thumbnails, shaders, web cache (<code>Cache/</code>); snapshots of the current frame used as the system wallpaper (<code>Data/SystemWallpaper/</code>).</li>
+<li><b>Logs</b> (<code>Logs/</code>): activity logs, which may contain your Steam account name and file paths. They stay on your Mac unless you export them yourself.</li>
+</ul>
+
+<h2>2. Network services WallPort connects to</h2>
+<ul>
+<li><b>Steam (Valve)</b>: signing in, reading your subscriptions, subscribing/unsubscribing and downloading use Steam's servers (client protocol servers, <code>api.steampowered.com</code>);
+browsing the Workshop reads public pages on <code>steamcommunity.com</code> and Steam's image and content servers. These requests go directly to Steam; WallPort's developer cannot see them.
+See the <a href="https://store.steampowered.com/privacy_agreement/">Steam Privacy Policy</a> for how Valve handles this data.</li>
+<li><b>Update check</b>: at launch and once a day, WallPort reads information about this project's latest release from GitHub (<code>api.github.com</code>); new versions are downloaded from GitHub too. The request carries only what every web request carries (your IP address, WallPort's version), no account or device identifier, and is handled by GitHub — the publisher cannot see it; see the <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub Privacy Statement</a>. You can turn off "Check for Updates Automatically" in the menu bar menu.</li>
+<li><b>Web wallpapers</b>: web wallpapers are web pages written by their authors and may access the internet themselves (weather, fonts). You can turn off "Allow Web Wallpapers to Use the Network" in the menu bar menu.</li>
+<li>Links such as "View on Steam" open in your browser.</li>
+</ul>
+
+<h2>3. System permissions</h2>
+<ul>
+<li><b>Files and folders</b>: macOS asks once when WallPort reads wallpapers stored in Documents, Downloads or on an external drive.</li>
+<li><b>System audio recording</b>: used only by music-reactive wallpapers, to read the spectrum (how loud each frequency band is) of the sound playing. <b>Nothing is recorded, saved or uploaded.</b></li>
+<li><b>Window positions</b>: to pause wallpapers when the desktop is covered, WallPort reads the positions and levels of on-screen windows — <b>never their contents or titles</b>; no Screen Recording permission is needed. You can turn this off in the Performance menu.</li>
+<li><b>System wallpaper</b>: with "Sync System Wallpaper to Current Frame" on, WallPort sets the current frame as the system wallpaper and restores your original wallpaper when it quits.</li>
+<li><b>Launch at Login</b>: registered only if you turn it on.</li>
+</ul>
+
+<h2>4. Exporting diagnostics</h2>
+<p>Help → Export Diagnostics… packs a summary (version, system, main settings), the logs and WallPort's crash reports into a zip saved where you choose. Your Steam account name and user name are removed first; sign-in credentials and the full settings file are not included. The file only leaves your Mac if you send it to someone.</p>
+
+<h2>5. Deleting all data</h2>
+<ol>
+<li>Quit WallPort (menu bar icon → Quit) — this restores your original system wallpaper;</li>
+<li>move the <code>~/WallPort</code> folder to the Trash;</li>
+<li>move WallPort from Applications to the Trash.</li>
+</ol>
+<p>Your subscriptions are kept by Steam and are not affected.</p>
+
+<h2>6. Children</h2>
+<p>WallPort is not directed at children. Workshop wallpapers rated Questionable or Mature are shown only after you confirm you are at least 18 years old.</p>
+
+<h2>7. Changes and contact</h2>
+<p>Changes to this policy are published with new versions, and the effective date above is updated. Questions: {{CONTACT}}.</p>
+</div>
+</body>
+</html>

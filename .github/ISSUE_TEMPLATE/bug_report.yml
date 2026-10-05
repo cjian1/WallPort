@@ -1,0 +1,39 @@
+name: 问题反馈 / Bug report
+description: 壁纸显示不对、闪退、登录或下载失败 / A wallpaper looks wrong, the app crashes, sign-in or download fails
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **请不要上传壁纸文件、Wallpaper Engine 的素材，或者 `~/WallPort/Data` 里的任何文件**（壁纸有版权，Data 里有你的登录凭证）。写创意工坊编号就行。
+        **Please don't upload wallpaper files, Wallpaper Engine assets, or anything from `~/WallPort/Data`** (copyright; your sign-in credential lives there). The Workshop ID is enough.
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么 / What happened
+      description: 你做了什么、期望看到什么、实际看到什么 / What you did, what you expected, what you saw
+    validations:
+      required: true
+  - type: input
+    id: workshop
+    attributes:
+      label: 壁纸的创意工坊编号 / Workshop ID of the wallpaper
+      description: 例如 / e.g. 1234567890（和壁纸无关的问题可以不填 / leave empty if unrelated）
+  - type: input
+    id: version
+    attributes:
+      label: 壁坞版本 / WallPort version
+      description: 菜单栏图标 → 关于壁坞 / Menu bar icon → About WallPort
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: macOS 版本和芯片 / macOS version and chip
+      description: 例如 / e.g. macOS 15.1, M2 Pro
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: 诊断信息 / Diagnostics
+      description: 打开壁纸库 → 帮助 → 导出诊断信息…，把 zip 拖到这里（账号名和用户名已经去掉）/ Open the Library → Help → Export Diagnostics… and drag the zip here (account and user names are removed)

@@ -1,0 +1,17 @@
+{
+  "title": "网页壁纸接口演示",
+  "description": "MacWallpaper 自己编写的测试夹具，用来验证网页壁纸兼容层。不含任何 Wallpaper Engine 内容。",
+  "type": "web",
+  "file": "index.html",
+  "general": {
+    "properties": {
+      "accentcolor": { "order": 0, "text": "主色", "type": "color", "value": "1 0.6 0.1" },
+      "speed": { "order": 1, "text": "转速", "type": "slider", "min": 0, "max": 5, "value": 1 },
+      "showclock": { "order": 2, "text": "显示时间", "type": "bool", "value": true },
+      "shape": {
+        "order": 3, "text": "形状", "type": "combo", "value": "ring",
+        "options": [{ "label": "圆环", "value": "ring" }, { "label": "方块", "value": "square" }]
+      }
+    }
+  }
+}

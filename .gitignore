@@ -1,0 +1,23 @@
+# 构建产物
+.build/
+build/
+.swiftpm/
+*.xcodeproj/xcuserdata/
+DerivedData/
+.DS_Store
+
+# Wallpaper Engine 的素材与创意工坊内容受版权保护，任何情况下都不得进入仓库。
+# 测试语料放在仓库之外的目录里。以后自己制作的测试夹具，需要时用 ! 规则显式放行。
+*.pkg
+*.tex
+*.mdl
+scene.json
+project.json
+corpus/
+we-assets/
+
+# 自己编写的测试夹具（不含任何 WE 内容）
+!Tests/Fixtures/**/project.json
+
+# 本机编辑器设置
+.vscode/

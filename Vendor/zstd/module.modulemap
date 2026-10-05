@@ -1,0 +1,5 @@
+// 只把解压需要的 C 接口（zstd.h）暴露给 Swift；实现文件（common/、decompress/）随项目一起编译。
+module CZstd [system] {
+    header "lib/zstd.h"
+    export *
+}

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 跟着音乐律动的壁纸：用 Core Audio 的进程 tap 读系统声音的频谱（Hardened Runtime 下读音频要这一项；
+	     系统照样会按 NSAudioCaptureUsageDescription 问用户，不录音、不保存） -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>

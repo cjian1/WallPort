@@ -1,0 +1,9 @@
+/* 中文系统里的 App 名字和授权提示 */
+CFBundleName = "壁坞";
+CFBundleDisplayName = "壁坞";
+NSAudioCaptureUsageDescription = "跟着音乐律动的壁纸要读取系统正在播放的声音频谱（只在这类壁纸播放时采集，不录音、不保存）。";
+NSDesktopFolderUsageDescription = "壁坞要读取你放在这个文件夹里的壁纸，才能把它们显示在桌面上。";
+NSDocumentsFolderUsageDescription = "壁坞要读取你放在这个文件夹里的壁纸，才能把它们显示在桌面上。";
+NSDownloadsFolderUsageDescription = "壁坞要读取你放在这个文件夹里的壁纸，才能把它们显示在桌面上。";
+NSNetworkVolumesUsageDescription = "壁坞要读取你放在网络磁盘上的壁纸，才能把它们显示在桌面上。";
+NSRemovableVolumesUsageDescription = "壁坞要读取你放在外接磁盘上的壁纸，才能把它们显示在桌面上。";

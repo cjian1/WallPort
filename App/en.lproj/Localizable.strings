@@ -1,0 +1,1406 @@
+/* WallPort 的英文界面。键是界面上的中文原文（中文系统找不到翻译时直接显示键）。
+   改了界面文字后跑 scripts/check-localization.sh：列出缺翻译的、用不上的、格式符对不上的。*/
+
+/* DesktopWindow.swift */
+"桌面层（与系统壁纸同层）" = "Desktop Level (same as the system wallpaper)";
+
+/* DesktopWindow.swift */
+"桌面层 + 1" = "Desktop Level + 1";
+
+/* DesktopWindow.swift */
+"桌面图标层 − 1" = "Desktop Icon Level − 1";
+
+/* Diagnostics.swift */
+"压缩失败（ditto 返回 %d）" = "Compression failed (ditto returned %d)";
+
+/* PowerState.swift */
+"用电池" = "On battery";
+
+/* PowerState.swift */
+"接电源" = "On power adapter";
+
+/* PowerState.swift */
+"低电量模式" = "Low Power Mode";
+
+/* PowerState.swift */
+"机器很热" = "Mac is hot";
+
+/* PowerState.swift */
+"机器过热" = "Mac is overheating";
+
+/* PowerState.swift */
+"照常播放" = "Play Normally";
+
+/* PowerState.swift */
+"降到 15 帧" = "Drop to 15 fps";
+
+/* PowerState.swift */
+"暂停壁纸" = "Pause Wallpaper";
+
+/* PowerState.swift */
+"不限制" = "Unlimited";
+
+/* PowerState.swift */
+"%lld 帧" = "%lld fps";
+
+/* SystemAudio.swift */
+"系统音频采集需要 macOS 14.2 或更新版本" = "Capturing system audio requires macOS 14.2 or later";
+
+/* SystemAudio.swift */
+"创建系统音频 tap 失败（多半是没授权系统音频录制）" = "Couldn’t create the system audio tap (system audio recording is probably not allowed)";
+
+/* AppDelegate.swift */
+"上次载入这张壁纸时壁坞意外退出了，这次先不载入。在壁纸库里重新选它可以再试一次" = "WallPort quit unexpectedly while loading this wallpaper last time, so it was skipped. Choose it again in the Library to retry.";
+
+/* AppDelegate.swift */
+"无法播放 %@：%@" = "Can’t play %@: %@";
+
+/* AppDelegate.swift */
+"找不到视频文件：%@" = "Video file not found: %@";
+
+/* AppDelegate.swift */
+"正在读取项目 %@…　如果系统询问文件访问权限，请允许" = "Reading project %@…  If macOS asks for file access, please allow it.";
+
+/* AppDelegate.swift */
+"读取项目失败：%@" = "Couldn’t read the project: %@";
+
+/* AppDelegate.swift */
+"「%@」的 project.json 没有写入口文件" = "The project.json of “%@” doesn’t specify an entry file";
+
+/* AppDelegate.swift */
+"场景「%@」载入失败：%@" = "Couldn’t load scene “%@”: %@";
+
+/* AppDelegate.swift */
+"「%@」是应用程序类壁纸，macOS 上无法运行" = "“%@” is an application wallpaper and can’t run on macOS";
+
+/* AppDelegate.swift */
+"「%@」的类型认不出来" = "The type of “%@” isn’t recognized";
+
+/* AppDelegate.swift */
+"壁坞" = "WallPort";
+
+/* AppDelegate.swift */
+"隐藏壁纸" = "Hide Wallpaper";
+
+/* AppDelegate.swift */
+"显示壁纸" = "Show Wallpaper";
+
+/* AppDelegate.swift */
+"壁纸库…" = "Library…";
+
+/* AppDelegate.swift */
+"关闭轮播" = "Turn Off Rotation";
+
+/* AppDelegate.swift */
+"开启轮播" = "Turn On Rotation";
+
+/* AppDelegate.swift */
+"每 %lld 分钟换一张" = "Every %lld Minutes";
+
+/* AppDelegate.swift */
+"立即换一张" = "Next Wallpaper Now";
+
+/* AppDelegate.swift */
+"轮播" = "Rotation";
+
+/* AppDelegate.swift */
+"按时间自动换壁纸：只换当前用着项目壁纸的显示器，候选是壁纸库里的场景、视频和网页。" = "Changes wallpapers on a schedule. Only displays currently showing a project wallpaper are changed; candidates are the scenes, videos and web wallpapers in the Library.";
+
+/* AppDelegate.swift */
+"全部继续" = "Resume All";
+
+/* AppDelegate.swift */
+"全部暂停" = "Pause All";
+
+/* AppDelegate.swift */
+"播放壁纸声音" = "Play Wallpaper Sound";
+
+/* AppDelegate.swift */
+"网页壁纸允许联网" = "Allow Web Wallpapers to Use the Network";
+
+/* AppDelegate.swift */
+"不限制帧率" = "Unlimited Frame Rate";
+
+/* AppDelegate.swift */
+"最高 %lld 帧" = "Up to %lld fps";
+
+/* AppDelegate.swift */
+"用电池时：%@" = "On Battery: %@";
+
+/* AppDelegate.swift */
+"桌面被窗口挡住时暂停" = "Pause When Desktop Is Covered";
+
+/* AppDelegate.swift */
+"桌面几乎被窗口盖满（只剩菜单栏、程序坞那一条）时，动态壁纸停在当前画面，露出来马上接着播放。" = "When windows cover almost the whole desktop (only the menu bar or Dock strip is visible), the wallpaper freezes on the current frame and resumes as soon as it’s visible again.";
+
+/* AppDelegate.swift */
+"按画面快慢自动降帧" = "Lower Frame Rate for Slow Scenes";
+
+/* AppDelegate.swift */
+"场景壁纸隔一会儿量一下画面动得多快，慢节奏的降到 20 或 24 帧（每帧挪动不超过 2 个点，看不出区别），动得快的照常。跟着音乐律动的不降；鼠标带动画面时按上限。" = "Scene wallpapers periodically measure how fast the picture moves. Slow scenes drop to 20 or 24 fps (at most 2 points of movement per frame, so you can’t tell the difference); fast ones run as usual. Music-reactive wallpapers aren’t lowered, and the full limit is used while the mouse is moving the scene.";
+
+/* AppDelegate.swift */
+"性能" = "Performance";
+
+/* AppDelegate.swift */
+"帧率上限影响场景和网页壁纸；现在在用电池。" = "The frame rate limit applies to scene and web wallpapers. Currently on battery.";
+
+/* AppDelegate.swift */
+"帧率上限影响场景和网页壁纸；现在接着电源。" = "The frame rate limit applies to scene and web wallpapers. Currently on power adapter.";
+
+/* AppDelegate.swift */
+"系统壁纸同步为当前画面" = "Sync System Wallpaper to Current Frame";
+
+/* AppDelegate.swift */
+"编辑桌面小组件、调度中心、锁屏时，系统会藏起动态壁纸，露出系统壁纸。开启后露出的是当前画面的静态帧；退出应用时恢复原来的系统壁纸。" = "When you edit desktop widgets, open Mission Control or lock the screen, macOS hides the live wallpaper and shows the system wallpaper. With this on, it shows a still of the current frame; the original system wallpaper is restored when you quit.";
+
+/* AppDelegate.swift */
+"跟随当前画面" = "Follow Current Frame";
+
+/* AppDelegate.swift */
+"锁屏时显示动态壁纸当前的画面（默认）" = "Show the live wallpaper’s current frame on the lock screen (default)";
+
+/* AppDelegate.swift */
+"选择图片…" = "Choose Image…";
+
+/* AppDelegate.swift */
+"当前：%@" = "Current: %@";
+
+/* AppDelegate.swift */
+"锁屏壁纸" = "Lock Screen Wallpaper";
+
+/* AppDelegate.swift */
+"锁屏、调度中心、编辑桌面小组件时系统会露出系统壁纸（需要打开上面的同步）。默认用动态壁纸当前的画面，也可以固定选一张图片——例如让锁屏看照片、桌面继续播动态壁纸。" = "macOS shows the system wallpaper on the lock screen, in Mission Control and while editing widgets (requires the sync option above). By default it uses the live wallpaper’s current frame; you can also pick a fixed image — for example, a photo on the lock screen while the desktop keeps playing the live wallpaper.";
+
+/* AppDelegate.swift */
+"开机自动启动" = "Launch at Login";
+
+/* AppDelegate.swift */
+"首次使用提示…" = "Getting Started…";
+
+/* AppDelegate.swift */
+"关于%@…" = "About %@…";
+
+/* AppDelegate.swift */
+"检查更新…" = "Check for Updates…";
+
+/* AppDelegate.swift */
+"窗口层级" = "Window Level";
+
+/* AppDelegate.swift */
+"立即自检" = "Run Self-Check Now";
+
+/* AppDelegate.swift */
+"打开日志" = "Open Log";
+
+/* AppDelegate.swift, MainMenu.swift */
+"导出诊断信息…" = "Export Diagnostics…";
+
+/* AppDelegate.swift */
+"导入 Wallpaper Engine 自带素材…" = "Import Wallpaper Engine Assets…";
+
+/* AppDelegate.swift */
+"重新导入 Wallpaper Engine 自带素材…" = "Re-import Wallpaper Engine Assets…";
+
+/* AppDelegate.swift */
+"累计修复 %lld 次" = "Repaired %lld Times";
+
+/* AppDelegate.swift */
+"退出" = "Quit";
+
+/* AppDelegate.swift */
+"当前：测试图案" = "Current: Test Pattern";
+
+/* AppDelegate.swift */
+"当前：" = "Current: ";
+
+/* AppDelegate.swift */
+"从壁纸库选择…" = "Choose from Library…";
+
+/* AppDelegate.swift */
+"选择视频…" = "Choose Video…";
+
+/* AppDelegate.swift */
+"选择壁纸项目文件夹…" = "Choose Wallpaper Project Folder…";
+
+/* AppDelegate.swift */
+"使用测试图案" = "Use Test Pattern";
+
+/* AppDelegate.swift */
+"壁纸设置…" = "Wallpaper Settings…";
+
+/* AppDelegate.swift */
+"继续播放" = "Resume";
+
+/* AppDelegate.swift, WorkshopViews.swift */
+"暂停" = "Pause";
+
+/* AppDelegate.swift */
+"为「%@」选择一个视频" = "Choose a video for “%@”";
+
+/* AppDelegate.swift */
+"不能用这个文件作壁纸" = "This file can’t be used as a wallpaper";
+
+/* AppDelegate.swift */
+"为「%@」选择一个含 project.json 的壁纸项目文件夹" = "Choose a wallpaper project folder containing project.json for “%@”";
+
+/* AppDelegate.swift */
+"不能用这个文件夹作壁纸" = "This folder can’t be used as a wallpaper";
+
+/* AppDelegate.swift */
+"不能用这个项目作壁纸" = "This project can’t be used as a wallpaper";
+
+/* AppDelegate.swift */
+"把「%@」移到废纸篓？" = "Move “%@” to the Trash?";
+
+/* AppDelegate.swift */
+"整个项目文件夹会移到废纸篓，需要时可以从废纸篓放回原处。" = "The whole project folder will be moved to the Trash. You can put it back from the Trash if needed.";
+
+/* AppDelegate.swift */
+"它正在 %lld 块显示器上用作壁纸，删除后这些显示器换成壁纸库里的下一张。" = "It’s the wallpaper on %lld displays; they’ll switch to the next wallpaper in the Library.";
+
+/* AppDelegate.swift */
+"勾上下面这项，会同时在 Steam 上取消订阅（不用打开网页）。" = "Check the option below to also unsubscribe on Steam (no need to open the website).";
+
+/* AppDelegate.swift */
+"同时在 Steam 上取消订阅" = "Also unsubscribe on Steam";
+
+/* AppDelegate.swift, FilterControls.swift, WorkshopViews.swift */
+"取消" = "Cancel";
+
+/* AppDelegate.swift */
+"在 Steam 上取消订阅「%@」要先登录。" = "Sign in to unsubscribe from “%@” on Steam.";
+
+/* AppDelegate.swift */
+"在 Steam 上取消订阅没有成功" = "Couldn’t unsubscribe on Steam";
+
+/* AppDelegate.swift */
+"「%@」\n%@\n本机的文件已经移到废纸篓。" = "“%@”\n%@\nThe local files have been moved to the Trash.";
+
+/* AppDelegate.swift */
+"移不到废纸篓" = "Couldn’t move to the Trash";
+
+/* AppDelegate.swift */
+"取消订阅「%@」？" = "Unsubscribe from “%@”?";
+
+/* AppDelegate.swift */
+"会在 Steam 上取消订阅。" = "This unsubscribes on Steam.";
+
+/* AppDelegate.swift, LibraryWindow.swift, WorkshopViews.swift */
+"取消订阅" = "Unsubscribe";
+
+/* AppDelegate.swift */
+"取消订阅要先登录 Steam。" = "Sign in to Steam to unsubscribe.";
+
+/* AppDelegate.swift */
+"取消订阅没有成功" = "Couldn’t unsubscribe";
+
+/* AppDelegate.swift */
+"会在 Steam 上取消订阅，并把它从这台 Mac 移除（文件移到废纸篓）。" = "This unsubscribes on Steam and removes it from this Mac (the files go to the Trash).";
+
+/* AppDelegate.swift */
+"它正在用作壁纸，取消后换成壁纸库里的下一张。" = "It’s currently in use as a wallpaper and will be replaced by the next one in the Library.";
+
+/* AppDelegate.swift */
+"「%@」\n%@\n本机的文件没有动。" = "“%@”\n%@\nThe local files were not changed.";
+
+/* AppDelegate.swift */
+"有 %lld 个壁纸已经不在你的订阅里" = "%lld wallpapers are no longer in your subscriptions";
+
+/* AppDelegate.swift */
+"它们是之前从创意工坊下到这台 Mac 的，后来在 Steam 上取消了订阅。要移到废纸篓吗？（只处理创意工坊下载目录里的，你自己拷来的壁纸不动）" = "They were downloaded from the Workshop to this Mac and later unsubscribed on Steam. Move them to the Trash? (Only items in the Workshop download folder are affected; wallpapers you copied yourself are left alone.)";
+
+/* AppDelegate.swift, LibraryWindow.swift */
+"移到废纸篓" = "Move to Trash";
+
+/* AppDelegate.swift */
+"保留" = "Keep";
+
+/* AppDelegate.swift */
+"改不了开机启动" = "Couldn’t change Launch at Login";
+
+/* AppDelegate.swift */
+"%@\n\n把 WallPort.app（壁坞）放到「应用程序」里再试（直接 swift run 的调试版不支持）。" = "%@\n\nMove WallPort.app to Applications and try again (debug builds run with swift run aren’t supported).";
+
+/* AppDelegate.swift */
+"请先把%@拖进「应用程序」文件夹" = "Please move %@ to the Applications folder first";
+
+/* AppDelegate.swift */
+"现在是直接从安装包（.dmg）或下载文件夹里打开的，macOS 会把它放在临时位置运行，「开机自动启动」等功能用不了。退出后把它拖进「应用程序」，再从那里打开。" = "It was opened directly from the disk image (.dmg) or the Downloads folder, so macOS runs it from a temporary location and features like “Launch at Login” won’t work. Quit, drag it to Applications, and open it from there.";
+
+/* AppDelegate.swift */
+"没能检查更新" = "Couldn’t check for updates";
+
+/* AppDelegate.swift */
+"已经是最新版本" = "You’re up to date";
+
+/* AppDelegate.swift */
+"%@ %@ 就是现在最新的版本。" = "%@ %@ is the latest version.";
+
+/* AppDelegate.swift */
+"%@ 有新版本 %@" = "A new version of %@ is available: %@";
+
+/* AppDelegate.swift */
+"下载后把新的%@拖进「应用程序」替换旧的；设置和壁纸都在 ~/WallPort 里，不受影响。" = "After downloading, drag the new %@ to Applications to replace the old one. Your settings and wallpapers in ~/WallPort are kept.";
+
+/* AppDelegate.swift */
+"下载" = "Download";
+
+/* AppDelegate.swift */
+"以后再说" = "Later";
+
+/* AppDelegate.swift */
+"跳过这个版本" = "Skip This Version";
+
+/* AppDelegate.swift */
+"%@诊断信息-%@.zip" = "%@ Diagnostics-%@.zip";
+
+/* AppDelegate.swift */
+"日志里的 Steam 账号名和你的用户名会被去掉；登录信息不会导出" = "Your Steam account name and user name are removed from the logs; sign-in data is never exported.";
+
+/* AppDelegate.swift */
+"没能导出诊断信息" = "Couldn’t export diagnostics";
+
+/* AppDelegate.swift */
+"选择放着壁纸项目的文件夹（里面每个子文件夹是一个壁纸项目）" = "Choose a folder of wallpaper projects (each subfolder is one project)";
+
+/* AppDelegate.swift */
+"project.json 没有写入口文件" = "project.json doesn’t specify an entry file";
+
+/* AppDelegate.swift */
+"入口页面不存在" = "The entry page doesn’t exist";
+
+/* AppDelegate.swift */
+"应用程序类壁纸在 macOS 上无法运行" = "Application wallpapers can’t run on macOS";
+
+/* AppDelegate.swift */
+"认不出项目类型" = "Unrecognized project type";
+
+/* AppDelegate.swift */
+"选一张锁屏时显示的图片。锁屏、调度中心等时候系统壁纸会换成它；桌面上的动态壁纸不受影响。" = "Choose an image for the lock screen. The system wallpaper switches to it on the lock screen, in Mission Control and so on; the live wallpaper on the desktop isn’t affected.";
+
+/* AppDelegate.swift */
+"用作锁屏壁纸" = "Use as Lock Screen Wallpaper";
+
+/* AppDelegate.swift */
+"选择从 Windows 上 Wallpaper Engine 安装目录拷来的 assets 文件夹（场景壁纸要用里面的着色器和贴图）" = "Choose the assets folder copied from the Wallpaper Engine installation on Windows (scene wallpapers need its shaders and textures)";
+
+/* AppDelegate.swift */
+"这不是 Wallpaper Engine 的 assets 文件夹" = "This isn’t a Wallpaper Engine assets folder";
+
+/* AppDelegate.swift */
+"「%@」里没有 shaders、materials 这些子文件夹。请选 Windows 上 Wallpaper Engine 安装目录（通常在 Steam\\steamapps\\common\\wallpaper_engine）里的 assets 文件夹。" = "“%@” has no shaders or materials subfolders. Choose the assets folder inside the Wallpaper Engine installation on Windows (usually Steam\\steamapps\\common\\wallpaper_engine).";
+
+/* AppDelegate.swift */
+"没能拷贝 Wallpaper Engine 自带素材" = "Couldn’t copy the Wallpaper Engine assets";
+
+/* FilterControls.swift */
+"分级" = "Rating";
+
+/* FilterControls.swift */
+"确认你已年满 18 岁" = "Confirm You’re 18 or Older";
+
+/* FilterControls.swift */
+"我已年满 18 岁" = "I’m 18 or Older";
+
+/* FilterControls.swift */
+"家长指导级、限制级的壁纸可能含有不适合未成年人的内容。确认后才会显示这两级的壁纸和预览图。" = "Questionable and Mature wallpapers may contain content unsuitable for minors. They and their previews are shown only after you confirm.";
+
+/* FilterControls.swift */
+"分辨率" = "Resolution";
+
+/* FilterControls.swift */
+"不限" = "Any";
+
+/* FilterControls.swift, LibraryWindow.swift */
+"类型" = "Type";
+
+/* FilterControls.swift, LibraryWindow.swift */
+"全部" = "All";
+
+/* FilterControls.swift, LibraryWindow.swift, WorkshopViews.swift */
+"场景" = "Scene";
+
+/* FilterControls.swift, LibraryWindow.swift, WorkshopViews.swift */
+"视频" = "Video";
+
+/* FilterControls.swift, LibraryWindow.swift, WorkshopViews.swift */
+"网页" = "Web";
+
+/* LibraryWindow.swift */
+"壁纸库" = "Library";
+
+/* LibraryWindow.swift, MainMenu.swift */
+"本机壁纸" = "On This Mac";
+
+/* LibraryWindow.swift, MainMenu.swift */
+"Steam 创意工坊" = "Steam Workshop";
+
+/* LibraryWindow.swift */
+"正在扫描…" = "Scanning…";
+
+/* LibraryWindow.swift */
+"壁纸文件夹里还没有项目" = "No projects in the wallpaper folders yet";
+
+/* LibraryWindow.swift */
+"场景 %lld" = "Scenes %lld";
+
+/* LibraryWindow.swift */
+"视频 %lld" = "Videos %lld";
+
+/* LibraryWindow.swift */
+"网页 %lld" = "Web %lld";
+
+/* LibraryWindow.swift */
+"其它 %lld" = "Other %lld";
+
+/* LibraryWindow.swift */
+"共 %lld 个：%@" = "%lld total: %@";
+
+/* LibraryWindow.swift */
+"选择放壁纸项目的文件夹（里面每个子文件夹是一个含 project.json 的项目）" = "Choose a folder of wallpaper projects (each subfolder is a project with a project.json)";
+
+/* LibraryWindow.swift */
+"（当前）" = " (Current)";
+
+/* LibraryWindow.swift */
+"搜索标题" = "Search Titles";
+
+/* LibraryWindow.swift, WorkshopViews.swift */
+"排序" = "Sort";
+
+/* LibraryWindow.swift */
+"正在读取分辨率…" = "Reading resolutions…";
+
+/* LibraryWindow.swift */
+"没找到显示器" = "No displays found";
+
+/* LibraryWindow.swift */
+"设到" = "Apply to";
+
+/* LibraryWindow.swift */
+"壁纸文件夹（%lld）" = "Wallpaper Folders (%lld)";
+
+/* LibraryWindow.swift */
+"在访达中显示" = "Show in Finder";
+
+/* LibraryWindow.swift */
+"从壁纸库移除" = "Remove from Library";
+
+/* LibraryWindow.swift */
+"添加文件夹…" = "Add Folder…";
+
+/* LibraryWindow.swift */
+"重新扫描" = "Rescan";
+
+/* LibraryWindow.swift */
+"还没有壁纸" = "No Wallpapers Yet";
+
+/* LibraryWindow.swift, WorkshopViews.swift */
+"没有符合条件的壁纸" = "No Matching Wallpapers";
+
+/* LibraryWindow.swift */
+"用「壁纸文件夹 → 添加文件夹…」加入从 Windows 拷来的 Wallpaper Engine 项目文件夹" = "Use “Wallpaper Folders → Add Folder…” to add Wallpaper Engine project folders copied from Windows";
+
+/* LibraryWindow.swift, WorkshopViews.swift */
+"设为壁纸" = "Set as Wallpaper";
+
+/* LibraryWindow.swift */
+"设到显示器" = "Set on Display";
+
+/* LibraryWindow.swift */
+"在创意工坊中打开" = "Open in Workshop";
+
+/* LibraryWindow.swift, WorkshopViews.swift */
+"取消订阅…" = "Unsubscribe…";
+
+/* LibraryWindow.swift */
+"移到废纸篓…" = "Move to Trash…";
+
+/* LibraryWindow.swift */
+"macOS 上放不了这种壁纸，也没有可以调整的设置。" = "This kind of wallpaper can’t play on macOS and has no settings.";
+
+/* LibraryWindow.swift */
+"点一张壁纸，它的设置会显示在这里。" = "Click a wallpaper to see its settings here.";
+
+/* LibraryWindow.swift */
+"（截图时不显示标题）" = "(Title hidden for screenshots)";
+
+/* LibraryWindow.swift */
+"当前壁纸" = "Current Wallpaper";
+
+/* LibraryWindow.swift */
+"设为「%@」的壁纸" = "Set as Wallpaper for “%@”";
+
+/* LibraryWindow.swift */
+"设到其它显示器" = "Set on Another Display";
+
+/* LibraryWindow.swift */
+"从 Steam 创意工坊订阅" = "Subscribed from Steam Workshop";
+
+/* LibraryWindow.swift */
+"在 Steam 上取消订阅，并把它从这台 Mac 移除" = "Unsubscribe on Steam and remove it from this Mac";
+
+/* LibraryWindow.swift */
+"这张壁纸现在没有在哪块屏幕上显示；改好的设置会在设为壁纸后生效。" = "This wallpaper isn’t showing on any display right now; changes take effect once it’s set as a wallpaper.";
+
+/* LibraryWindow.swift */
+"在创意工坊中打开（订阅、取消订阅、看评论）" = "Open in Workshop (subscribe, unsubscribe, read comments)";
+
+/* LibraryWindow.swift */
+"应用（不支持）" = "Application (unsupported)";
+
+/* LibraryWindow.swift */
+"未知类型" = "Unknown Type";
+
+/* LibraryWindow.swift */
+"当前" = "Current";
+
+/* MacWallpaperMain.swift */
+"WallPort.app     软件本身" = "WallPort.app     The app itself";
+
+/* MacWallpaperMain.swift */
+"壁坞（WallPort）的所有文件都在这个文件夹里。" = "All of WallPort’s files are in this folder.";
+
+/* MacWallpaperMain.swift */
+"壁坞（WallPort）的所有文件都在这个文件夹里（软件本身在「应用程序」里）。" = "All of WallPort’s files are in this folder (the app itself is in Applications).";
+
+/* MacWallpaperMain.swift */
+"Settings.plist   设置（壁纸库、每块屏幕放的壁纸、性能、筛选……）" = "Settings.plist   Settings (library, wallpaper per display, performance, filters…)";
+
+/* MacWallpaperMain.swift */
+"Workshop/        从 Steam 创意工坊下载的壁纸（每个编号一个文件夹）" = "Workshop/        Wallpapers downloaded from the Steam Workshop (one folder per item ID)";
+
+/* MacWallpaperMain.swift */
+"Assets/          导入的 Wallpaper Engine 自带素材（可选；没有时用壁坞自带的兼容素材）" = "Assets/          Imported Wallpaper Engine assets (optional; WallPort’s compatible assets are used otherwise)";
+
+/* MacWallpaperMain.swift */
+"Data/            Steam 登录信息、壁纸详情缓存、同步给系统的壁纸截图" = "Data/            Steam sign-in, wallpaper details cache, frames synced to the system wallpaper";
+
+/* MacWallpaperMain.swift */
+"Cache/           缓存，删了会自动重建" = "Cache/           Caches; rebuilt automatically if deleted";
+
+/* MacWallpaperMain.swift */
+"Logs/            日志，出问题时看这里" = "Logs/            Logs; look here when something goes wrong";
+
+/* MacWallpaperMain.swift */
+"不用了的话，先退出壁坞，再把整个文件夹移到废纸篓。" = "To uninstall, quit WallPort and move this whole folder to the Trash.";
+
+/* MacWallpaperMain.swift */
+"不用了的话，先退出壁坞，再把整个文件夹和「应用程序」里的壁坞移到废纸篓。" = "To uninstall, quit WallPort and move this whole folder and WallPort in Applications to the Trash.";
+
+/* MacWallpaperMain.swift */
+"macOS 自己还会记一点东西（窗口位置、网页 Cookie 之类），放在系统的位置，删不删都行。" = "macOS also keeps a few things of its own (window positions, web cookies and so on) in system locations; deleting them is optional.";
+
+/* MacWallpaperMain.swift */
+"说明.txt" = "Read Me.txt";
+
+/* MainMenu.swift */
+"关于%@" = "About %@";
+
+/* MainMenu.swift */
+"服务" = "Services";
+
+/* MainMenu.swift */
+"隐藏%@" = "Hide %@";
+
+/* MainMenu.swift */
+"隐藏其他" = "Hide Others";
+
+/* MainMenu.swift */
+"全部显示" = "Show All";
+
+/* MainMenu.swift */
+"退出%@" = "Quit %@";
+
+/* MainMenu.swift */
+"文件" = "File";
+
+/* MainMenu.swift, WelcomeWindow.swift */
+"打开壁纸库" = "Open Library";
+
+/* MainMenu.swift, WelcomeWindow.swift */
+"添加壁纸文件夹…" = "Add Wallpaper Folder…";
+
+/* MainMenu.swift */
+"关闭窗口" = "Close Window";
+
+/* MainMenu.swift */
+"编辑" = "Edit";
+
+/* MainMenu.swift */
+"撤销" = "Undo";
+
+/* MainMenu.swift */
+"重做" = "Redo";
+
+/* MainMenu.swift */
+"剪切" = "Cut";
+
+/* MainMenu.swift */
+"拷贝" = "Copy";
+
+/* MainMenu.swift */
+"粘贴" = "Paste";
+
+/* MainMenu.swift */
+"全选" = "Select All";
+
+/* MainMenu.swift */
+"显示" = "View";
+
+/* MainMenu.swift */
+"进入全屏幕" = "Enter Full Screen";
+
+/* MainMenu.swift */
+"前往" = "Go";
+
+/* MainMenu.swift */
+"创意工坊" = "Workshop";
+
+/* MainMenu.swift, WorkshopModel.swift */
+"我的订阅" = "My Subscriptions";
+
+/* MainMenu.swift, WelcomeWindow.swift, WorkshopViews.swift */
+"登录 Steam…" = "Sign In to Steam…";
+
+/* MainMenu.swift */
+"窗口" = "Window";
+
+/* MainMenu.swift */
+"最小化" = "Minimize";
+
+/* MainMenu.swift */
+"缩放" = "Zoom";
+
+/* MainMenu.swift */
+"前置全部窗口" = "Bring All to Front";
+
+/* MainMenu.swift */
+"帮助" = "Help";
+
+/* MainMenu.swift */
+"%@使用说明" = "%@ Help";
+
+/* MainMenu.swift */
+"打开日志文件夹" = "Open Logs Folder";
+
+/* PropertiesWindow.swift */
+"这个壁纸没有可以调整的设置。" = "This wallpaper has no settings.";
+
+/* PropertiesWindow.swift */
+"显示内容 · %@" = "Show Content · %@";
+
+/* PropertiesWindow.swift */
+"按壁纸内容自动列出，关掉的就不画。作者自己的设置里有同样的开关时，两边任一关掉都不显示。" = "Listed automatically from the wallpaper’s contents; anything turned off isn’t drawn. If the author’s own settings have the same switch, turning off either one hides it.";
+
+/* PropertiesWindow.swift */
+"恢复默认" = "Restore Defaults";
+
+/* PropertiesWindow.swift */
+"暂不支持" = "Not Supported Yet";
+
+/* TestPatternView.swift */
+"%lld × %lld 点 · %lld × %lld 像素 · @%@x" = "%lld × %lld points · %lld × %lld pixels · @%@x";
+
+/* TestPatternView.swift */
+"显示器 %u · 第 %lld 代窗口 · 创建于 %@" = "Display %u · window generation %lld · created %@";
+
+/* TestPatternView.swift */
+"壁坞 WallPort · 桌面层测试图案" = "WallPort · desktop level test pattern";
+
+/* WelcomeWindow.swift */
+"欢迎使用%@" = "Welcome to %@";
+
+/* WelcomeWindow.swift */
+"壁坞 WallPort" = "WallPort";
+
+/* WelcomeWindow.swift */
+"播放兼容 Wallpaper Engine 的动态壁纸（场景、视频、网页），壁纸显示在桌面图标下面。" = "Plays Wallpaper Engine–compatible live wallpapers (scenes, videos and web pages) beneath your desktop icons.";
+
+/* WelcomeWindow.swift */
+"1. 登录 Steam" = "1. Sign in to Steam";
+
+/* WelcomeWindow.swift */
+"壁坞从 Steam 创意工坊下载你订阅的壁纸，账号需要拥有 Wallpaper Engine。推荐用手机上的 Steam App 扫码登录，不用在这里输入密码。" = "WallPort downloads your subscribed wallpapers from the Steam Workshop; your account must own Wallpaper Engine. Signing in by scanning a QR code with the Steam app on your phone is recommended — no need to type your password here.";
+
+/* WelcomeWindow.swift */
+"已登录 %@" = "Signed in as %@";
+
+/* WelcomeWindow.swift */
+"2. Wallpaper Engine 自带素材（可选）" = "2. Wallpaper Engine assets (optional)";
+
+/* WelcomeWindow.swift */
+"壁坞自带一套兼容素材，不导入也能放场景壁纸，只是部分粒子、光效的样子和原版不同。想要和 Wallpaper Engine 完全一样，把 Windows 电脑上 Wallpaper Engine 安装目录里的 assets 文件夹拷到这台 Mac（U 盘、网盘都行），在这里选一下，壁坞会拷进自己的文件夹。" = "WallPort comes with its own compatible assets, so scene wallpapers play without importing anything — some particles and light effects just look different from the originals. For results identical to Wallpaper Engine, copy the assets folder from the Wallpaper Engine installation on your Windows PC to this Mac (a USB drive or cloud storage works), choose it here, and WallPort copies it into its own folder.";
+
+/* WelcomeWindow.swift */
+"选择 assets 文件夹…" = "Choose assets Folder…";
+
+/* WelcomeWindow.swift */
+"正在拷贝…" = "Copying…";
+
+/* WelcomeWindow.swift */
+"已导入" = "Imported";
+
+/* WelcomeWindow.swift */
+"现在用壁坞自带的兼容素材" = "Using WallPort’s compatible assets";
+
+/* WelcomeWindow.swift */
+"3. 同步订阅" = "3. Sync subscriptions";
+
+/* WelcomeWindow.swift */
+"登录后在壁纸库底部点「同步订阅」，你在 Steam 上订阅的壁纸会下载到这台 Mac。也可以添加自己电脑上的壁纸文件夹。" = "After signing in, click “Sync Subscriptions” at the bottom of the Library to download the wallpapers you subscribed to on Steam. You can also add wallpaper folders from your own computer.";
+
+/* WelcomeWindow.swift */
+"壁纸库里有 %lld 个文件夹" = "%lld folders in the Library";
+
+/* WelcomeWindow.swift */
+"第一次播放跟着音乐律动的壁纸时，系统会询问是否允许录制系统音频：只读取声音的频谱，不录音、不保存。" = "The first time a music-reactive wallpaper plays, macOS asks whether to allow system audio recording. Only the sound spectrum is read; nothing is recorded or saved.";
+
+/* WelcomeWindow.swift */
+"壁坞的所有文件都在 ~/WallPort 里；这个窗口可以从菜单栏的「首次使用提示」再打开" = "All of WallPort’s files are in ~/WallPort. You can reopen this window from “Getting Started” in the menu bar.";
+
+/* WorkshopModel.swift */
+"浏览" = "Browse";
+
+/* WorkshopModel.swift, WorkshopNative.swift */
+"失败" = "Failed";
+
+/* WorkshopModel.swift */
+"看自己的订阅要先登录 Steam。" = "Sign in to Steam to see your subscriptions.";
+
+/* WorkshopModel.swift */
+"Steam 的登录过期了，请重新登录。" = "Your Steam sign-in has expired. Please sign in again.";
+
+/* WorkshopModel.swift */
+"账户名称只能是字母、数字和 _ . -（登录 Steam 用的账户名称，不是昵称）" = "The account name can only contain letters, digits and _ . - (it’s the name you sign in to Steam with, not your profile name)";
+
+/* WorkshopModel.swift */
+"请填密码" = "Please enter your password";
+
+/* WorkshopModel.swift */
+"订阅要先登录 Steam。" = "Sign in to Steam to subscribe.";
+
+/* WorkshopModel.swift */
+"正在订阅…" = "Subscribing…";
+
+/* WorkshopModel.swift */
+"已订阅，开始下载。" = "Subscribed. Starting download.";
+
+/* WorkshopModel.swift */
+"在 Steam 上订阅没有成功（%@），先下载到这台 Mac。" = "Couldn’t subscribe on Steam (%@); downloading to this Mac anyway.";
+
+/* WorkshopModel.swift */
+"已暂停下载，还有 %lld 个没下。" = "Download paused; %lld remaining.";
+
+/* WorkshopModel.swift */
+"下载前要先登录 Steam。" = "Sign in to Steam before downloading.";
+
+/* WorkshopModel.swift */
+"正在下载 %lld 个…" = "Downloading %lld…";
+
+/* WorkshopModel.swift */
+"Steam 的登录过期了，重新登录后接着下载。" = "Your Steam sign-in has expired. Downloads continue after you sign in again.";
+
+/* WorkshopModel.swift, WorkshopViews.swift */
+"下载失败：%@" = "Download failed: %@";
+
+/* WorkshopModel.swift */
+"下载完成 %lld 个，已加进壁纸库。" = "Downloaded %lld and added them to the Library.";
+
+/* WorkshopModel.swift */
+"下载完成 %lld 个，失败 %lld 个，已加进壁纸库。" = "Downloaded %lld (%lld failed) and added them to the Library.";
+
+/* WorkshopModel.swift */
+"下载失败 %lld 个。" = "%lld downloads failed.";
+
+/* WorkshopModel.swift */
+"没有要下载的。" = "Nothing to download.";
+
+/* WorkshopModel.swift */
+"同步订阅要先登录 Steam。" = "Sign in to Steam to sync subscriptions.";
+
+/* WorkshopModel.swift */
+"正在读取你的订阅列表…" = "Reading your subscriptions…";
+
+/* WorkshopModel.swift */
+"读取订阅失败：%@" = "Couldn’t read subscriptions: %@";
+
+/* WorkshopModel.swift */
+"你订阅了 %lld 个，这台 Mac 上还缺 %lld 个。" = "You’re subscribed to %lld; %lld are missing on this Mac.";
+
+/* WorkshopViews.swift */
+"刷新创意工坊列表" = "Refresh Workshop List";
+
+/* WorkshopViews.swift */
+"重新读取订阅列表" = "Reload Subscriptions";
+
+/* WorkshopViews.swift */
+"搜索创意工坊" = "Search Workshop";
+
+/* WorkshopViews.swift */
+"搜索我的订阅" = "Search My Subscriptions";
+
+/* WorkshopViews.swift */
+"正在读取你的订阅…" = "Reading your subscriptions…";
+
+/* WorkshopViews.swift */
+"正在加载创意工坊…" = "Loading the Workshop…";
+
+/* WorkshopViews.swift */
+"加载失败：%@" = "Couldn’t load: %@";
+
+/* WorkshopViews.swift */
+"重试" = "Retry";
+
+/* WorkshopViews.swift */
+"登录 Steam 后，这里会列出你订阅的壁纸。" = "Sign in to Steam to see your subscribed wallpapers here.";
+
+/* WorkshopViews.swift */
+"没有符合条件的订阅" = "No Matching Subscriptions";
+
+/* WorkshopViews.swift */
+"共 %lld 个" = "%lld total";
+
+/* WorkshopViews.swift */
+"没有更多了" = "No more items";
+
+/* WorkshopViews.swift */
+"下载到壁纸库" = "Download to Library";
+
+/* WorkshopViews.swift */
+"订阅并下载" = "Subscribe & Download";
+
+/* WorkshopViews.swift */
+"在 Steam 上查看" = "View on Steam";
+
+/* WorkshopViews.swift */
+"%@ 订阅" = "%@ subscribers";
+
+/* WorkshopViews.swift */
+"等待下载" = "Waiting";
+
+/* WorkshopViews.swift */
+"%lld%%" = "%lld%%";
+
+/* WorkshopViews.swift */
+"准备下载…" = "Preparing…";
+
+/* WorkshopViews.swift */
+"已下载" = "Downloaded";
+
+/* WorkshopViews.swift */
+"已订阅" = "Subscribed";
+
+/* WorkshopViews.swift */
+"应用" = "Application";
+
+/* WorkshopViews.swift */
+"壁纸" = "Wallpaper";
+
+/* WorkshopViews.swift */
+"正在同步到 Steam…" = "Syncing with Steam…";
+
+/* WorkshopViews.swift */
+"点一张壁纸，在这里订阅、下载或设为壁纸。" = "Click a wallpaper to subscribe, download or set it as your wallpaper here.";
+
+/* WorkshopViews.swift */
+"等待下载…" = "Waiting to download…";
+
+/* WorkshopViews.swift */
+"正在下载 %lld%%" = "Downloading %lld%%";
+
+/* WorkshopViews.swift */
+"正在准备下载…" = "Preparing download…";
+
+/* WorkshopViews.swift */
+"已在壁纸库" = "In Library";
+
+/* WorkshopViews.swift */
+"已在 Steam 上订阅" = "Subscribed on Steam";
+
+/* WorkshopViews.swift */
+"在 Steam 上订阅，并把它下到这台 Mac 的壁纸库。" = "Subscribe on Steam and download it to this Mac’s Library.";
+
+/* WorkshopViews.swift */
+"更新于 %@" = "Updated %@";
+
+/* WorkshopViews.swift */
+"继续" = "Resume";
+
+/* WorkshopViews.swift */
+"接着下载剩下的 %lld 个" = "Continue downloading the remaining %lld";
+
+/* WorkshopViews.swift */
+"正在下的那个停下，剩下的先不下；点「继续」接着下" = "Stops the current download and holds the rest; click “Resume” to continue";
+
+/* WorkshopViews.swift */
+"%lld 项下载失败" = "%lld downloads failed";
+
+/* WorkshopViews.swift */
+"清除记录" = "Clear";
+
+/* WorkshopViews.swift */
+"退出登录" = "Sign Out";
+
+/* WorkshopViews.swift */
+"同步订阅" = "Sync Subscriptions";
+
+/* WorkshopViews.swift */
+"读取你在 Steam 上的订阅，把这台 Mac 上还没有的下载下来" = "Reads your Steam subscriptions and downloads the ones not yet on this Mac";
+
+/* WorkshopViews.swift */
+"Steam 创意工坊：已暂停，还有 %lld 个没下" = "Steam Workshop: paused, %lld remaining";
+
+/* WorkshopViews.swift */
+"Steam 创意工坊：还有 %lld 个在下载" = "Steam Workshop: %lld downloading";
+
+/* WorkshopViews.swift */
+"Steam 创意工坊：还有 %lld 个在下载（当前 %lld%%）" = "Steam Workshop: %lld downloading (current %lld%%)";
+
+/* WorkshopViews.swift */
+"Steam 创意工坊：已登录" = "Steam Workshop: signed in";
+
+/* WorkshopViews.swift */
+"Steam 创意工坊：未登录（可以浏览，订阅和下载要登录）" = "Steam Workshop: not signed in (you can browse; subscribing and downloading require signing in)";
+
+/* WorkshopViews.swift */
+"下载失败的 %lld 项" = "%lld Failed Downloads";
+
+/* WorkshopViews.swift */
+"全部重试" = "Retry All";
+
+/* WorkshopViews.swift */
+"有提示：%@" = "Notice: %@";
+
+/* WorkshopViews.swift */
+"没有新提示" = "No new notices";
+
+/* WorkshopViews.swift */
+"提示" = "Notices";
+
+/* WorkshopViews.swift */
+"知道了" = "OK";
+
+/* WorkshopViews.swift */
+
+/* WorkshopViews.swift */
+
+/* WorkshopViews.swift */
+"关闭" = "Close";
+
+/* WorkshopViews.swift */
+
+/* WorkshopViews.swift */
+"正在登录 Steam…" = "Signing in to Steam…";
+
+/* WorkshopViews.swift */
+"正在核对验证码…" = "Checking the code…";
+
+/* WorkshopViews.swift */
+"请查看你的邮箱" = "Check your email";
+
+/* WorkshopViews.swift */
+"输入 Steam 手机令牌上的验证码" = "Enter the code from the Steam Mobile Authenticator";
+
+/* WorkshopViews.swift */
+"Steam 给你的邮箱发了一个验证码。" = "Steam sent a code to your email.";
+
+/* WorkshopViews.swift */
+"打开手机上的 Steam 应用，在「Steam 令牌」里查看。" = "Open the Steam app on your phone and look under “Steam Guard”.";
+
+/* WorkshopViews.swift */
+"请在手机 Steam 应用上点「批准」" = "Tap “Approve” in the Steam app on your phone";
+
+/* WorkshopViews.swift */
+"或者输入 Steam 令牌上的验证码：" = "Or enter the code from Steam Guard:";
+
+/* WorkshopViews.swift */
+"取消登录" = "Cancel Sign-In";
+
+/* WorkshopViews.swift */
+
+/* WorkshopViews.swift */
+
+/* WorkshopViews.swift */
+
+/* WorkshopViews.swift */
+"用手机上的 Steam 应用扫这个二维码，然后点「批准」" = "Scan this QR code with the Steam app on your phone, then tap “Approve”";
+
+/* WorkshopViews.swift */
+"Steam 应用 → 右下角「≡」→ 扫码（或直接扫这个码）" = "Steam app → “≡” at the bottom right → Scan a QR code (or just scan this code)";
+
+/* WorkshopViews.swift */
+"Steam 账户名称" = "Steam Account Name";
+
+/* WorkshopViews.swift */
+"密码" = "Password";
+
+/* WorkshopViews.swift */
+"登录" = "Sign In";
+
+/* WorkshopViews.swift */
+"忘记了账号或密码？" = "Forgot your account name or password?";
+
+/* WorkshopViews.swift */
+"确定" = "OK";
+
+/* SteamCM.swift */
+"成功" = "Success";
+
+/* SteamCM.swift */
+"失败（EResult 2）" = "Failed (EResult 2)";
+
+/* SteamCM.swift */
+"没有登录" = "Not signed in";
+
+/* SteamCM.swift, WorkshopNative.swift */
+"账号或密码不对" = "Incorrect account name or password";
+
+/* SteamCM.swift */
+"需要 Steam Guard 验证码" = "Steam Guard code required";
+
+/* SteamCM.swift */
+"验证码不对" = "Incorrect code";
+
+/* SteamCM.swift */
+"登录太频繁，Steam 暂时拒绝" = "Too many sign-in attempts; Steam is temporarily refusing";
+
+/* SteamCM.swift */
+"需要两步验证码" = "Two-factor code required";
+
+/* SteamCM.swift */
+"失败（EResult %d）" = "Failed (EResult %d)";
+
+/* SteamCMConnection.swift */
+"连接已关闭" = "Connection closed";
+
+/* SteamCMConnection.swift */
+"和 Steam 的连接断了（%@）" = "Lost connection to Steam (%@)";
+
+/* UGCContent.swift */
+"没有可用的内容服务器" = "No content servers available";
+
+/* UGCContent.swift */
+"Steam 的内容服务器暂时忙不过来（%@ 返回 HTTP %lld），过一会儿点「重试」" = "Steam’s content servers are busy (%@ returned HTTP %lld). Click “Retry” in a while.";
+
+/* UGCContent.swift */
+"%@ 返回 HTTP %lld" = "%@ returned HTTP %lld";
+
+/* VideoContent.swift */
+"文件不存在" = "The file doesn’t exist";
+
+/* VideoContent.swift */
+"系统无法播放这个文件，可能是 WebM 等 AVFoundation 不支持的格式" = "macOS can’t play this file; it may be WebM or another format AVFoundation doesn’t support";
+
+/* VideoContent.swift */
+"文件里没有视频轨道" = "The file has no video track";
+
+/* VideoContent.swift */
+"未知错误" = "Unknown error";
+
+/* SceneElements.swift */
+"粒子" = "Particles";
+
+/* SceneElements.swift */
+"文字 / 时钟" = "Text / Clock";
+
+/* SceneElements.swift */
+"特效" = "Effects";
+
+/* SceneElements.swift */
+"文字 %lld" = "Text %lld";
+
+/* SceneElements.swift */
+"%@（%@）" = "%@ (%@)";
+
+/* SceneElements.swift */
+"晃动" = "Shake";
+
+/* SceneElements.swift */
+"水波" = "Water Waves";
+
+/* SceneElements.swift */
+"植物摇摆" = "Foliage Sway";
+
+/* SceneElements.swift */
+"脉动" = "Pulse";
+
+/* SceneElements.swift */
+"水面涟漪" = "Water Ripple";
+
+/* SceneElements.swift */
+"X 光" = "X-Ray";
+
+/* SceneElements.swift */
+"水流" = "Water Flow";
+
+/* SceneElements.swift */
+"闪光" = "Shine";
+
+/* SceneElements.swift */
+"眼睛移动" = "Iris Movement";
+
+/* SceneElements.swift */
+"眼睛跟随鼠标" = "Iris Follows Cursor";
+
+/* SceneElements.swift */
+"光束" = "Light Shafts";
+
+/* SceneElements.swift */
+"混合" = "Blend";
+
+/* SceneElements.swift */
+"透明度" = "Opacity";
+
+/* SceneElements.swift */
+"模糊" = "Blur";
+
+/* SceneElements.swift */
+"动态模糊" = "Motion Blur";
+
+/* SceneElements.swift */
+"局部对比度" = "Local Contrast";
+
+/* SceneElements.swift */
+"电光" = "Nitro";
+
+/* SceneElements.swift */
+"变色" = "Hue Shift";
+
+/* SceneElements.swift */
+"滚动" = "Scroll";
+
+/* SceneElements.swift */
+"云" = "Clouds";
+
+/* SceneElements.swift */
+"VHS 故障" = "VHS Glitch";
+
+/* SceneElements.swift */
+"旋涡" = "Twirl";
+
+/* SceneElements.swift */
+"旋转" = "Spin";
+
+/* SceneElements.swift */
+"倒影" = "Reflection";
+
+/* SceneElements.swift */
+"变换" = "Transform";
+
+/* SceneElements.swift */
+"着色" = "Tint";
+
+/* SceneElements.swift */
+"摆动" = "Swing";
+
+/* SceneElements.swift */
+"火焰" = "Fire";
+
+/* SceneElements.swift */
+"泛光" = "Bloom";
+
+/* SceneElements.swift */
+"音频条" = "Audio Bars";
+
+/* SceneElements.swift */
+"音频示波器" = "Audio Oscilloscope";
+
+/* SceneElements.swift */
+"扫描线" = "Scan Lines";
+
+/* LocalLibraryFilter.swift */
+"最近加入" = "Recently Added";
+
+/* LocalLibraryFilter.swift, WorkshopCatalog.swift */
+"按标题" = "Title";
+
+/* LocalLibraryFilter.swift */
+"占用空间" = "Size";
+
+/* Playlist.swift */
+"按顺序" = "In Order";
+
+/* Playlist.swift */
+"随机" = "Shuffle";
+
+/* UpdateCheck.swift */
+"更新地址不是 https，不检查" = "The update URL isn’t https; not checking";
+
+/* UpdateCheck.swift */
+
+/* UpdateCheck.swift */
+
+/* UserProperty.swift */
+"方案颜色" = "Scheme Color";
+
+/* UserProperty.swift */
+"对齐方式" = "Alignment";
+
+/* UserProperty.swift */
+"背景颜色" = "Background Color";
+
+/* UserProperty.swift */
+"图片" = "Image";
+
+/* WallpaperCategories.swift */
+"大众级(G)" = "Everyone (G)";
+
+/* WallpaperCategories.swift */
+"家长指导级(PG-13)" = "Questionable (PG-13)";
+
+/* WallpaperCategories.swift */
+"限制级/成人级(R-18)" = "Mature (R-18)";
+
+/* WallpaperCategories.swift */
+"标清 / 720p" = "Standard / 720p";
+
+/* WallpaperCategories.swift */
+"2K（1440p）" = "2K (1440p)";
+
+/* WallpaperCategories.swift */
+"4K（2160p）" = "4K (2160p)";
+
+/* WallpaperCategories.swift */
+"超宽屏" = "Ultrawide";
+
+/* WallpaperCategories.swift */
+"双屏 / 三屏" = "Dual / Triple Monitor";
+
+/* WallpaperCategories.swift */
+"竖屏" = "Portrait";
+
+/* WallpaperCategories.swift */
+"自适应（动态）" = "Dynamic";
+
+/* WallpaperCategories.swift */
+"其它" = "Other";
+
+/* WallpaperProject.swift */
+"文件夹里没有 project.json" = "The folder has no project.json";
+
+/* WallpaperProject.swift */
+"project.json 不是有效的 JSON" = "project.json isn’t valid JSON";
+
+/* WallpaperProject.swift */
+"入口文件指向项目文件夹之外：%@" = "The entry file points outside the project folder: %@";
+
+/* WorkshopCatalog.swift */
+"本周最热" = "Trending This Week";
+
+/* WorkshopCatalog.swift */
+"本月最热" = "Trending This Month";
+
+/* WorkshopCatalog.swift */
+"今年最热" = "Trending This Year";
+
+/* WorkshopCatalog.swift */
+"订阅最多" = "Most Subscribed";
+
+/* WorkshopCatalog.swift */
+"最新发布" = "Most Recent";
+
+/* WorkshopCatalog.swift */
+"最近更新" = "Recently Updated";
+
+/* WorkshopCatalog.swift */
+"最近订阅" = "Recently Subscribed";
+
+/* WorkshopCatalog.swift */
+"文件最大" = "Largest";
+
+/* WorkshopCatalog.swift */
+"创意工坊返回的数据看不懂" = "Couldn’t understand the Workshop’s response";
+
+/* WorkshopCatalog.swift */
+"Steam 返回 HTTP %lld" = "Steam returned HTTP %lld";
+
+/* WorkshopNative.swift */
+"要先登录 Steam" = "You need to sign in to Steam first";
+
+/* WorkshopNative.swift */
+"这次登录不用填验证码" = "This sign-in doesn’t need a code";
+
+/* WorkshopNative.swift */
+"连不上 Steam（%@）" = "Can’t connect to Steam (%@)";
+
+/* WorkshopNative.swift */
+"登录没有完成：%@" = "Sign-in didn’t complete: %@";
+
+/* WorkshopNative.swift */
+"等确认超时，请重新登录" = "Timed out waiting for confirmation. Please sign in again.";
+
+/* WorkshopNative.swift */
+"Steam 不认这次登录拿到的令牌，请再试一次" = "Steam rejected the token from this sign-in. Please try again.";
+
+/* WorkshopNative.swift */
+"编号不对" = "Invalid item ID";
+
+/* WorkshopNative.swift */
+"没有可用的 CM" = "no CM servers available";
+
+/* WorkshopNative.swift */
+"登录 Steam 失败：%@" = "Steam sign-in failed: %@";
+
+/* WorkshopNative.swift */
+"连不上 Steam（没有可用的 CM）" = "Can’t connect to Steam (no CM servers available)";
+
+/* WorkshopNative.swift */
+"下载失败" = "Download failed";
+
+/* WorkshopNative.swift */
+"验证码不对，请再看一下" = "Incorrect code. Please check it again.";
+
+/* WorkshopNative.swift */
+"登录太频繁，Steam 暂时拒绝了，请过一会儿再试" = "Too many sign-in attempts and Steam refused for now. Please try again later.";
+
+/* WorkshopNative.swift */
+"这次登录已经过期，请重新登录" = "This sign-in has expired. Please sign in again.";
+
+/* WorkshopNative.swift */
+"找不到这个条目（可能已被删除）" = "Item not found (it may have been deleted)";
+
+/* WorkshopNative.swift */
+"没有权限（这个账号可能没买 Wallpaper Engine，或者条目已被作者设为不公开）" = "Access denied (this account may not own Wallpaper Engine, or the author made the item private)";
+
+/* WorkshopNative.swift */
+"读不到条目详情（Steam 返回 %u）" = "Couldn’t read item details (Steam returned %u)";
+
+/* PropertiesWindow.swift、AppDelegate.swift：壁纸自己的声音和显示方式 */
+"上" = "Top";
+"下" = "Bottom";
+"左" = "Left";
+"右" = "Right";
+"上下位置" = "Vertical position";
+"左右位置" = "Horizontal position";
+"壁纸和屏幕的比例不同，铺满时只看得到约 %lld%%，用上面的滑块选看哪一部分。" = "The wallpaper’s shape differs from the screen: filling shows only about %lld%% of it. Use the slider to choose which part.";
+"声音" = "Sound";
+"完整显示" = "Show whole";
+"铺满屏幕" = "Fill screen";
+"显示方式" = "Display";
+"总开关：视频的音轨、网页壁纸的声音、场景里的声音对象。壁纸被遮住或暂停时声音也停。单个壁纸的静音和音量在壁纸库右侧的设置里。" = "Master switch for video soundtracks, web wallpaper audio and scene sound objects. Sound stops when the wallpaper is covered or paused. Mute or set the volume of a single wallpaper in its settings in the library.";
+"打开壁纸声音" = "Turn On Wallpaper Sound";
+"播放声音" = "Play sound";
+"整张壁纸都在屏幕上，比例不同的方向两边留黑边。" = "The whole wallpaper fits on the screen, with black bars where the shapes differ.";
+"菜单栏里的“播放壁纸声音”关着，所有壁纸都不出声。" = "“Play Wallpaper Sound” is off in the menu bar, so no wallpaper makes sound.";
+"音量" = "Volume";
+
+/* 隐私政策、使用条款、登录说明 */
+"%@不是 Steam 或 Valve 的产品，用的是自己实现的 Steam 客户端（不是 Steam 官方软件）。密码只发给 Steam、不保存；登录后的凭证加密存在这台 Mac 上，退出登录即删除。Valve 有可能限制用非官方客户端登录的账号，是否登录请自行判断。" = "%@ is not a Steam or Valve product. It signs in with its own implementation of the Steam client, not the official Steam app. Your password goes only to Steam and is never stored; the sign-in credential is stored encrypted on this Mac and deleted when you sign out. Valve may restrict accounts that sign in through unofficial clients, so decide for yourself whether to sign in.";
+"%@是独立开发的软件，不是 Wallpaper Engine 或 Steam 的官方产品，不提供、不托管任何壁纸。使用即表示你同意使用条款。" = "%@ is independent software, not an official Wallpaper Engine or Steam product, and does not provide or host any wallpapers. By using it you agree to the Terms of Use.";
+"%@用你的 Steam 账号读取订阅、下载创意工坊的壁纸" = "%@ uses your Steam account to read your subscriptions and download Workshop wallpapers";
+"使用条款" = "Terms of Use";
+"反馈问题…" = "Report a Problem…";
+"或者用账户名称和密码登录" = "Or sign in with your account name and password";
+"扫码登录（推荐）" = "Sign In with QR Code (Recommended)";
+"用手机上的 Steam 应用扫二维码确认，不用在这里输入密码。" = "Scan the code with the Steam app on your phone to confirm — no need to type your password here.";
+"登录 Steam" = "Sign In to Steam";
+"访问%@网站" = "%@ Website";
+"隐私政策" = "Privacy Policy";
+"自动检查更新" = "Check for Updates Automatically";
+"GitHub 返回 HTTP %lld" = "GitHub returned HTTP %lld";
+"检查更新用的仓库名不对" = "The repository name used for update checks is invalid";
+"每天向 GitHub 读一次最新版本的信息（会用到你的网络地址，不带任何账号信息）。关掉以后只在点「检查更新…」时检查。" = "Once a day, reads information about the latest release from GitHub (this uses your network address but no account information). When off, WallPort checks only when you choose Check for Updates…";
+"看不懂 GitHub 返回的内容" = "Couldn’t read GitHub’s response";
+"这个仓库还没有发布任何版本" = "This repository hasn’t published any releases yet";

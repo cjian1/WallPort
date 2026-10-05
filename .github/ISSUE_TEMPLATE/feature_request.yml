@@ -1,0 +1,10 @@
+name: 功能建议 / Feature request
+description: 想要壁坞支持的功能或壁纸效果 / Something you'd like WallPort to support
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: 想要什么 / What you'd like
+      description: 用在什么场景、现在缺了什么；和某张壁纸有关的话写上创意工坊编号 / What for and what's missing; add the Workshop ID if it's about a wallpaper
+    validations:
+      required: true

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>网页壁纸接口演示</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #101426; color: #fff;
+               font: 18px -apple-system, "PingFang SC", sans-serif; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #panel { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); text-align: center;
+           line-height: 1.7; opacity: 0.85; white-space: pre; }
+  #clock { font-size: 64px; font-weight: 600; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="panel"><div id="clock"></div><div id="status"></div></div>
+<img id="dot" src="dot.svg" alt="" style="position:absolute;left:24px;bottom:24px">
+<script>
+  // MacWallpaper 的网页壁纸兼容层测试夹具。所有 console 输出都会进入应用的诊断日志。
+  const state = { color: [1, 0.6, 0.1], speed: 1, showClock: true, shape: 'ring', paused: false, frames: 0 };
+  const status = document.getElementById('status');
+  const clock = document.getElementById('clock');
+
+  const render = () => {
+    status.textContent = [
+      `颜色 ${state.color.map((c) => c.toFixed(2)).join(' ')} · 转速 ${state.speed} · 形状 ${state.shape}`,
+      `${state.paused ? '已暂停' : '运行中'} · 页面可见性 ${document.visibilityState}`,
+    ].join('\n');
+    clock.style.display = state.showClock ? '' : 'none';
+  };
+
+  // 按 WE 文档的要求，在任何事件之外设置全局 listener
+  window.wallpaperPropertyListener = {
+    applyUserProperties(properties) {
+      console.log('applyUserProperties 收到：' + Object.keys(properties).join(','));
+      if (properties.accentcolor) state.color = properties.accentcolor.value.split(' ').map(Number);
+      if (properties.speed) state.speed = properties.speed.value;
+      if (properties.showclock) state.showClock = properties.showclock.value;
+      if (properties.shape) state.shape = properties.shape.value;
+      console.log('属性生效：' + JSON.stringify(state));
+      render();
+    },
+    applyGeneralProperties(properties) {
+      console.log('applyGeneralProperties 收到 fps=' + properties.fps);
+    },
+    setPaused(isPaused) {
+      state.paused = isPaused;
+      console.log('setPaused(' + isPaused + ')');
+      render();
+    },
+  };
+
+  window.wallpaperRegisterAudioListener((samples) => {});
+  document.addEventListener('visibilitychange', () => {
+    console.log('页面可见性：' + document.visibilityState);
+    render();
+  });
+  document.getElementById('dot').addEventListener('load', () => console.log('同目录图片加载成功'));
+  fetch('data.json').then((r) => r.json()).then((d) => console.log(d.message))
+    .catch((e) => console.error('同源 fetch 失败：' + e));
+  // 故意触发一个未捕获的错误，验证脚本错误能进日志
+  setTimeout(() => { window.自检用的不存在的函数(); }, 0);
+
+  const canvas = document.getElementById('stage');
+  const context = canvas.getContext('2d');
+  let angle = 0;
+  let lastReport = performance.now();
+  const frame = (now) => {
+    const ratio = window.devicePixelRatio || 1;
+    if (canvas.width !== innerWidth * ratio) {
+      canvas.width = innerWidth * ratio;
+      canvas.height = innerHeight * ratio;
+    }
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.clearRect(0, 0, innerWidth, innerHeight);
+    angle += 0.02 * state.speed;
+    const [r, g, b] = state.color.map((c) => Math.round(c * 255));
+    context.strokeStyle = context.fillStyle = `rgb(${r},${g},${b})`;
+    context.lineWidth = 14;
+    context.save();
+    context.translate(innerWidth / 2, innerHeight * 0.38);
+    context.rotate(angle);
+    if (state.shape === 'square') {
+      context.strokeRect(-110, -110, 220, 220);
+    } else {
+      context.beginPath();
+      context.arc(0, 0, 120, 0, Math.PI * 1.6);
+      context.stroke();
+    }
+    context.restore();
+    clock.textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+
+    state.frames += 1;
+    if (now - lastReport >= 10000) {
+      console.log('rAF 帧率 ' + Math.round(state.frames * 1000 / (now - lastReport)));
+      state.frames = 0;
+      lastReport = now;
+    }
+    requestAnimationFrame(frame);
+  };
+  render();
+  requestAnimationFrame(frame);
+  console.log('页面脚本启动');
+</script>
+</body>
+</html>

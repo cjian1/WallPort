@@ -1,0 +1,4 @@
+/* App name and permission prompt on non-Chinese systems */
+CFBundleName = "WallPort";
+CFBundleDisplayName = "WallPort";
+NSAudioCaptureUsageDescription = "Music-reactive wallpapers read the spectrum of the sound your Mac is playing (only while such a wallpaper is playing; nothing is recorded or saved).";
