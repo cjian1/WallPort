@@ -126,34 +126,39 @@ public struct UGCContentDownloader: Sendable {
     ///   先写到旁边的 `.<名字>.partial`，整个文件写完才改名成正式的名字。
     ///
     /// 应用里用 `install(_:at:…)`：它在这个基础上保证失败时不留下半截的项目。
+    ///
+    /// - Parameter concurrency: 同时下几个文件。创意工坊的壁纸文件少、个头大，一个个来就行（默认 1）；
+    ///   WE 自带素材是几千个小文件，一个个来光等网络来回就要好几分钟
     @discardableResult
     public func download(
-        _ manifest: ContentManifest, to directory: URL, hosts: [String], depotKey: [UInt8],
+        _ manifest: ContentManifest, to directory: URL, hosts: [String], depotKey: [UInt8], concurrency: Int = 1,
         progress: (@Sendable (Progress) -> Void)? = nil
     ) async throws -> Progress {
         guard !hosts.isEmpty else { throw SteamCMError(String(localized: "没有可用的内容服务器")) }
         let fileManager = FileManager.default
         let regularFiles = manifest.files.filter { !$0.isDirectory && !$0.isSymlink }
-        var state = Progress()
-        state.filesTotal = regularFiles.count
-        state.chunksTotal = regularFiles.reduce(0) { $0 + $1.chunks.count }
-        state.bytesTotal = regularFiles.reduce(0) { $0 + $1.size }
+        var initial = Progress()
+        initial.filesTotal = regularFiles.count
+        initial.chunksTotal = regularFiles.reduce(0) { $0 + $1.chunks.count }
+        initial.bytesTotal = regularFiles.reduce(0) { $0 + $1.size }
+        let tracker = ProgressTracker(initial)
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
 
         for entry in manifest.files where entry.isDirectory {
             let folder = try Self.outputURL(for: entry.relativePath, in: directory)
             try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
         }
-        for file in regularFiles {
-            try Task.checkCancellation()
+        let depot = manifest.depotID
+        let writeOne: @Sendable (ContentManifest.File) async throws -> Void = { file in
+            let fileManager = FileManager.default
             let target = try Self.outputURL(for: file.relativePath, in: directory)
             let folder = target.deletingLastPathComponent()
             try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
             let partial = folder.appendingPathComponent(".\(target.lastPathComponent).partial")
             do {
-                try await write(file, to: partial, hosts: hosts, depot: manifest.depotID, depotKey: depotKey) { bytes in
-                    state.chunksDone += 1
-                    state.bytesDone += UInt64(bytes)
+                try await write(file, to: partial, hosts: hosts, depot: depot, depotKey: depotKey) { bytes in
+                    // 先记上再回调（写成 progress?(tracker.update…) 的话，没给回调时连记都不记）
+                    let state = tracker.update { $0.chunksDone += 1; $0.bytesDone += UInt64(bytes) }
                     progress?(state)
                 }
                 if fileManager.fileExists(atPath: target.path) { try fileManager.removeItem(at: target) }
@@ -162,10 +167,47 @@ public struct UGCContentDownloader: Sendable {
                 try? fileManager.removeItem(at: partial)
                 throw error
             }
-            state.filesDone += 1
+            let state = tracker.update { $0.filesDone += 1 }
             progress?(state)
         }
-        return state
+        if concurrency <= 1 {
+            for file in regularFiles {
+                try Task.checkCancellation()
+                try await writeOne(file)
+            }
+        } else {
+            // 最多同时 `concurrency` 个；有一个失败就整体失败（其余的会被取消）
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                var running = 0
+                for file in regularFiles {
+                    try Task.checkCancellation()
+                    if running >= concurrency {
+                        try await group.next()
+                        running -= 1
+                    }
+                    group.addTask { try await writeOne(file) }
+                    running += 1
+                }
+                try await group.waitForAll()
+            }
+        }
+        return tracker.update { _ in }
+    }
+
+    /// 并发下载时各个文件一起更新进度
+    private final class ProgressTracker: @unchecked Sendable {
+        private let lock = NSLock()
+        private var state: Progress
+
+        init(_ state: Progress) { self.state = state }
+
+        /// 改一下，返回改完的样子
+        func update(_ change: (inout Progress) -> Void) -> Progress {
+            lock.withLock {
+                change(&state)
+                return state
+            }
+        }
     }
 
     /// 下载并**整体换进** `target`：先下到旁边的 `.downloading-<名字>`，全部成功后再替换原来的目录。
@@ -173,7 +215,7 @@ public struct UGCContentDownloader: Sendable {
     /// 临时目录以 `.` 开头，壁纸库扫描时会跳过
     @discardableResult
     public func install(
-        _ manifest: ContentManifest, at target: URL, hosts: [String], depotKey: [UInt8],
+        _ manifest: ContentManifest, at target: URL, hosts: [String], depotKey: [UInt8], concurrency: Int = 1,
         progress: (@Sendable (Progress) -> Void)? = nil
     ) async throws -> Progress {
         let fileManager = FileManager.default
@@ -184,7 +226,8 @@ public struct UGCContentDownloader: Sendable {
         try? fileManager.removeItem(at: staging)
         let state: Progress
         do {
-            state = try await download(manifest, to: staging, hosts: hosts, depotKey: depotKey, progress: progress)
+            state = try await download(
+                manifest, to: staging, hosts: hosts, depotKey: depotKey, concurrency: concurrency, progress: progress)
         } catch {
             try? fileManager.removeItem(at: staging)
             throw error

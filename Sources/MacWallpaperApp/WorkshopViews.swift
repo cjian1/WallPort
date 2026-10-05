@@ -526,7 +526,9 @@ struct WorkshopStatusBar: View {
             Image(systemName: "cloud").foregroundStyle(.secondary)
             Text(statusText).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 8)
-            if (model.isSyncing || model.isDownloading) && !model.isPaused { ProgressView().controlSize(.small) }
+            if ((model.isSyncing || model.isDownloading) && !model.isPaused) || model.engineAssetsProgress != nil {
+                ProgressView().controlSize(.small)
+            }
             if model.pendingCount > 0 {
                 if model.isPaused {
                     Button("继续") { model.resumeDownloads() }
@@ -573,6 +575,10 @@ struct WorkshopStatusBar: View {
     }
 
     private var statusText: String {
+        // 正在从 Steam 下载 WE 自带素材（登录后自动）：先说这个
+        if let progress = model.engineAssetsProgress, model.pendingCount == 0 {
+            return String(localized: "正在从 Steam 下载 Wallpaper Engine 自带素材（\(Int(progress * 100))%）")
+        }
         let waiting = model.pendingCount
         if waiting > 0 {
             if model.isPaused { return String(localized: "Steam 创意工坊：已暂停，还有 \(waiting) 个没下") }

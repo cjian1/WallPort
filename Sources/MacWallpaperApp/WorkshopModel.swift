@@ -176,13 +176,99 @@ final class WorkshopModel: NSObject, ObservableObject {
 
     init(
         libraryFolders: @escaping () -> [URL], onDownloaded: @escaping (URL) -> Void,
-        onUnsubscribed: @escaping ([URL]) -> Void, log: @escaping (String) -> Void = { _ in }
+        onUnsubscribed: @escaping ([URL]) -> Void, log: @escaping (String) -> Void = { _ in },
+        usesCustomAssets: @escaping () -> Bool = { false }, onEngineAssetsInstalled: @escaping () -> Void = {}
     ) {
         self.libraryFolders = libraryFolders
         self.onDownloaded = onDownloaded
         self.onUnsubscribed = onUnsubscribed
         self.log = log
+        self.usesCustomAssets = usesCustomAssets
+        self.onEngineAssetsInstalled = onEngineAssetsInstalled
         super.init()
+    }
+
+    // MARK: - Wallpaper Engine 自带素材
+
+    /// 从 Steam 下好的 WE 自带素材是哪个版本（"<depot>:<清单编号>"，存在设置里）。没有表示没下过：
+    /// 要么还没有素材，要么是用户自己导入的
+    static let engineAssetsVersionKey = "engineAssetsVersion"
+    /// 正在从 Steam 下载 WE 自带素材时的进度（0…1）；nil 表示没在下
+    @Published private(set) var engineAssetsProgress: Double?
+    private var engineAssetsTask: Task<Void, Never>?
+    /// 设置里另外指定了素材目录（迁移前指到外接盘上 WE 的安装目录之类）：不自动下载
+    private let usesCustomAssets: () -> Bool
+    /// 下好了：App 换用新素材、重建场景
+    private let onEngineAssetsInstalled: () -> Void
+
+    /// 用登录的账号从 Steam 下载 WE 自带素材（账号要拥有 Wallpaper Engine），装进 `~/WallPort/Assets`。
+    /// 登录后自动调：本机还没有素材，或者之前是从 Steam 下的、Steam 上又更新了，才在后台下；
+    /// 用户自己导入的（没记下版本）不动。`force`（菜单里点"从 Steam 下载"）时不管有没有都重新下
+    func syncEngineAssets(force: Bool = false) {
+        guard engineAssetsTask == nil, AppFolder.isActive else { return }
+        guard session != nil else {
+            if force {
+                showLogin(reason: String(localized: "从 Steam 下载 Wallpaper Engine 自带素材要先登录。")) {
+                    self.syncEngineAssets(force: true)
+                }
+            }
+            return
+        }
+        let target = AppFolder.assets
+        let installed = AppFolder.settings.string(forKey: Self.engineAssetsVersionKey)
+        let exists = FileManager.default.fileExists(atPath: target.path)
+        if !force, usesCustomAssets() || (exists && installed == nil) { return }
+        engineAssetsTask = Task {
+            defer {
+                engineAssetsTask = nil
+                engineAssetsProgress = nil
+            }
+            do {
+                if !force, exists {
+                    let latest = try await withSession { try await self.native.engineAssetsVersion(session: $0) }
+                    guard latest != installed else { return }
+                    log("WE 自带素材：Steam 上有新版本 \(latest)（本机 \(installed ?? "无")），重新下载")
+                }
+                engineAssetsProgress = 0
+                log("WE 自带素材：开始用账号从 Steam 下载")
+                let throttle = ProgressThrottle()
+                let version = try await withSession { session in
+                    try await self.native.downloadEngineAssets(session: session, to: target) { fraction in
+                        guard throttle.shouldReport(fraction) else { return }
+                        Task { @MainActor in if self.engineAssetsTask != nil { self.engineAssetsProgress = fraction } }
+                    }
+                }
+                AppFolder.settings.set(version, forKey: Self.engineAssetsVersionKey)
+                log("WE 自带素材：已从 Steam 下载（\(version)）")
+                message = String(localized: "Wallpaper Engine 自带素材已经从 Steam 下载好，场景壁纸会和原版一样。")
+                onEngineAssetsInstalled()
+            } catch is CancellationError {
+                log("WE 自带素材：下载取消")
+            } catch WorkshopNative.Failure.notLoggedIn {
+                log("WE 自带素材：登录过期，没有下载")
+            } catch {
+                log("WE 自带素材：下载失败（\(error.localizedDescription)）")
+                // 自动更新失败不打扰（旧的那份照样能用）；第一次下、或者用户点的，告诉一声
+                if force || !exists {
+                    message = String(localized: "没能从 Steam 下载 Wallpaper Engine 自带素材（\(error.localizedDescription)），现在用壁坞自带的兼容素材。")
+                }
+            }
+        }
+    }
+
+    /// 下载进度每涨 1% 才报一次（素材是几千个小文件，每个文件都报的话界面要刷几千次）
+    private final class ProgressThrottle: @unchecked Sendable {
+        private let lock = NSLock()
+        private var last = -1
+
+        func shouldReport(_ fraction: Double) -> Bool {
+            let percent = Int(fraction * 100)
+            return lock.withLock {
+                guard percent > last else { return false }
+                last = percent
+                return true
+            }
+        }
     }
 
     var isLoggedIn: Bool { session != nil }
@@ -229,6 +315,7 @@ final class WorkshopModel: NSObject, ObservableObject {
             case .connected:
                 log("创意工坊：用存着的会话登上 Steam（账号 \(stored.accountName)）")
                 refreshSubscribedIDs()
+                syncEngineAssets()
             case .expired:
                 if session?.refreshToken == stored.refreshToken { sessionExpired(reason: "启动时 Steam 不认存着的会话") }
             case .unreachable(let reason):
@@ -550,6 +637,7 @@ final class WorkshopModel: NSObject, ObservableObject {
     func signOut() {
         log("创意工坊：用户退出登录")
         cancelSignIn()
+        engineAssetsTask?.cancel()
         sessionStore.clear()
         if let account = session?.accountName {
             AppFolder.settings.removeObject(forKey: Self.subscribedIDsKey(account))
@@ -590,6 +678,7 @@ final class WorkshopModel: NSObject, ObservableObject {
         loginStep = .idle
         isShowingLogin = false
         refreshSubscribedIDs()
+        syncEngineAssets()
         let actions = afterLogin
         afterLogin = []
         actions.forEach { $0() }

@@ -135,6 +135,21 @@ public struct ContentManifest: Sendable {
         return copy
     }
 
+    /// 只留某个子文件夹里的东西，路径去掉这一级（不区分大小写）。WE 安装包的 depot 里除了 `assets/`
+    /// 还有程序本身，下自带素材时只要 `subtree("assets")`
+    public func subtree(_ folder: String) -> ContentManifest {
+        let prefix = folder.trimmingCharacters(in: CharacterSet(charactersIn: "/\\")).lowercased() + "/"
+        var copy = self
+        copy.files = files.compactMap { file in
+            let path = file.relativePath
+            guard path.lowercased().hasPrefix(prefix), path.count > prefix.count else { return nil }
+            return File(
+                name: String(path.dropFirst(prefix.count)), size: file.size, chunks: file.chunks, flags: file.flags,
+                linkTarget: file.linkTarget)
+        }
+        return copy
+    }
+
     /// 清单里的文件名是 base64（标准或 URL-safe，可能少了 `=` 填充）
     static func base64Bytes(_ text: String) -> [UInt8]? {
         var value = text.trimmingCharacters(in: .whitespacesAndNewlines)

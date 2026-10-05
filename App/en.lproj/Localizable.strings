@@ -728,10 +728,8 @@
 "已登录 %@" = "Signed in as %@";
 
 /* WelcomeWindow.swift */
-"2. Wallpaper Engine 自带素材（可选）" = "2. Wallpaper Engine assets (optional)";
 
 /* WelcomeWindow.swift */
-"壁坞自带一套兼容素材，不导入也能放场景壁纸，只是部分粒子、光效的样子和原版不同。想要和 Wallpaper Engine 完全一样，把 Windows 电脑上 Wallpaper Engine 安装目录里的 assets 文件夹拷到这台 Mac（U 盘、网盘都行），在这里选一下，壁坞会拷进自己的文件夹。" = "WallPort comes with its own compatible assets, so scene wallpapers play without importing anything — some particles and light effects just look different from the originals. For results identical to Wallpaper Engine, copy the assets folder from the Wallpaper Engine installation on your Windows PC to this Mac (a USB drive or cloud storage works), choose it here, and WallPort copies it into its own folder.";
 
 /* WelcomeWindow.swift */
 "选择 assets 文件夹…" = "Choose assets Folder…";
@@ -740,7 +738,6 @@
 "正在拷贝…" = "Copying…";
 
 /* WelcomeWindow.swift */
-"已导入" = "Imported";
 
 /* WelcomeWindow.swift */
 "现在用壁坞自带的兼容素材" = "Using WallPort’s compatible assets";
@@ -1404,3 +1401,20 @@
 "每天向 GitHub 读一次最新版本的信息（会用到你的网络地址，不带任何账号信息）。关掉以后只在点「检查更新…」时检查。" = "Once a day, reads information about the latest release from GitHub (this uses your network address but no account information). When off, WallPort checks only when you choose Check for Updates…";
 "看不懂 GitHub 返回的内容" = "Couldn’t read GitHub’s response";
 "这个仓库还没有发布任何版本" = "This repository hasn’t published any releases yet";
+
+/* 从 Steam 下载 WE 自带素材 */
+"2. Wallpaper Engine 自带素材（自动）" = "2. Wallpaper Engine's built-in assets (automatic)";
+"Steam 上的 Wallpaper Engine 信息里找不到可下载的内容" = "Steam's information about Wallpaper Engine lists nothing to download";
+"Wallpaper Engine 的安装包里没找到 assets 文件夹" = "No assets folder was found in Wallpaper Engine's installation";
+"Wallpaper Engine 自带素材已经从 Steam 下载好，场景壁纸会和原版一样。" = "Wallpaper Engine's built-in assets have been downloaded from Steam — scene wallpapers will look the same as in Wallpaper Engine.";
+"从 Steam 下载 Wallpaper Engine 自带素材" = "Download Wallpaper Engine Assets from Steam";
+"从 Steam 下载 Wallpaper Engine 自带素材要先登录。" = "Sign in to Steam to download Wallpaper Engine's built-in assets.";
+"已就绪" = "Ready";
+"正在从 Steam 下载 Wallpaper Engine 自带素材（%lld%%）" = "Downloading Wallpaper Engine assets from Steam (%lld%%)";
+"正在从 Steam 下载…%lld%%" = "Downloading from Steam… %lld%%";
+"没能从 Steam 下载 Wallpaper Engine 自带素材（%@），现在用壁坞自带的兼容素材。" = "Couldn’t download Wallpaper Engine’s built-in assets from Steam (%@). WallPort is using its own compatible assets for now.";
+"没能从 Steam 取到 Wallpaper Engine 的下载信息" = "Couldn’t get Wallpaper Engine’s download information from Steam";
+"用你登录的 Steam 账号（要拥有 Wallpaper Engine）下载它的自带素材，场景壁纸就和原版一样。登录后没有素材时会自动下载。" = "Downloads Wallpaper Engine’s built-in assets with the Steam account you signed in with (it must own Wallpaper Engine), so scene wallpapers look the same as in Wallpaper Engine. This happens automatically after you sign in if the assets are missing.";
+"登录以后，壁坞会用你的账号从 Steam 下载 Wallpaper Engine 的自带素材（账号拥有 Wallpaper Engine 就行，约 85 MB），场景壁纸就和原版一样。下好之前、或者没登录时，用壁坞自带的兼容素材，部分粒子、光效的样子和原版不同。也可以手动选从 Windows 上拷来的 assets 文件夹。" = "After you sign in, WallPort uses your account to download Wallpaper Engine’s built-in assets from Steam (your account just needs to own Wallpaper Engine; about 85 MB), so scene wallpapers look the same as in Wallpaper Engine. Until then, or without signing in, WallPort uses its own compatible assets, and some particles and light effects look different. You can also choose an assets folder copied from Windows.";
+"登录后自动下载" = "Downloaded automatically after you sign in";
+"这个 Steam 账号没有 Wallpaper Engine，下载不了它的自带素材" = "This Steam account doesn’t own Wallpaper Engine, so its built-in assets can’t be downloaded";

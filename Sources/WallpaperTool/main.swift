@@ -60,6 +60,9 @@ import WallpaperLibrary
 //   WallpaperTool web-capture <项目文件夹> <输出.png> [宽 高]
 //     网页壁纸按给定屏幕尺寸（点，默认 1512×982）打开：报告页面有没有超出视口，并存一张截图。
 //
+//   WallpaperTool steam-assets <输出目录> | --version
+//     用本机存的 Steam 会话下载 Wallpaper Engine 自带素材（App 里登录后自动下载的同一条路），或者只看 Steam 上的版本。
+//
 //   WallpaperTool steam-cm [--keychain] [--framings] [--details <编号>] [--servers] …
 //     连 Steam 的 CM（客户端协议）验登录、条目详情、内容服务器列表（M7.5）。
 //
@@ -371,6 +374,8 @@ case ("web-capture", 3), ("web-capture", 5):
     let size = arguments.count == 5
         ? CGSize(width: Double(arguments[3]) ?? 1512, height: Double(arguments[4]) ?? 982) : CGSize(width: 1512, height: 982)
     exit(await webCapture(folder: arguments[1], output: arguments[2], size: size))
+case ("steam-assets", 2):
+    exit(await steamAssets(output: arguments[1] == "--version" ? nil : arguments[1]))
 case ("steam-cm", 1...):
     exit(await steamCMProbe(Array(arguments.dropFirst())))
 case ("steam-manifest", 2...3):

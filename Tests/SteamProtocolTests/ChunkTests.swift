@@ -219,6 +219,40 @@ import Testing
         #expect(ContentServerError(host: "x", status: 503).errorDescription?.contains("暂时忙不过来") == true)
     }
 
+    /// 同时下好几个文件（WE 自带素材是几千个小文件）：每个文件都对、进度对得上，而且真的是并发下的
+    @Test func downloaderFetchesFilesConcurrently() async throws {
+        let sha = Insecure.SHA1.hash(data: content).map { String(format: "%02x", $0) }.joined()
+        let chunk = ContentManifest.Chunk(
+            sha: [UInt8](hexString: sha), offset: 0, originalSize: UInt32(content.count),
+            compressedSize: UInt32(encryptedChunk.count))
+        let files = (0..<24).map { ContentManifest.File(name: "dir\($0 % 3)/f\($0).bin", size: UInt64(content.count), chunks: [chunk]) }
+        let manifest = ContentManifest(files: files, depotID: 431_961, manifestID: 7)
+        final class Gauge: @unchecked Sendable {
+            private let lock = NSLock()
+            private var running = 0
+            private(set) var peak = 0
+            func enter() { lock.withLock { running += 1; peak = max(peak, running) } }
+            func leave() { lock.withLock { running -= 1 } }
+        }
+        let gauge = Gauge()
+        let blob = encryptedChunk
+        let downloader = UGCContentDownloader(fetch: { _ in
+            gauge.enter()
+            defer { gauge.leave() }
+            try await Task.sleep(for: .milliseconds(20))
+            return blob
+        })
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("steam-ugc-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let state = try await downloader.download(
+            manifest, to: directory, hosts: ["content.example.com"], depotKey: key, concurrency: 6)
+        #expect(state.filesDone == 24 && state.chunksDone == 24 && state.bytesDone == UInt64(content.count * 24))
+        for index in 0..<24 {
+            #expect(try Data(contentsOf: directory.appendingPathComponent("dir\(index % 3)/f\(index).bin")) == content)
+        }
+        #expect(gauge.peak > 1 && gauge.peak <= 6, "同时下的文件数：\(gauge.peak)")
+    }
+
     /// 拿回来的分块如果不是要的那一枚（校验和不对），要停下来
     @Test func downloaderRejectsWrongChunk() async throws {
         let manifest = ContentManifest(

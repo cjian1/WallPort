@@ -11,6 +11,7 @@
 ## 功能
 
 - 登录 Steam 后同步你在创意工坊订阅的壁纸，也能在 App 里直接浏览、订阅、下载
+- 登录后自动用你的账号从 Steam 下载 Wallpaper Engine 的自带素材，场景壁纸和原版一样，不用从 Windows 电脑拷文件
 - 场景壁纸：图层、特效（Wallpaper Engine 的着色器在运行时翻译成 Metal）、粒子、木偶动画、文字和时钟、脚本、声音
 - 每块屏幕放不同的壁纸，可以定时轮播；壁纸作者提供的设置（颜色、开关、滑块）可以直接调
 - 省电：桌面被窗口挡住、用电池、机器发热时自动降帧或暂停；画面动得慢的场景自动降到 20 / 24 帧
@@ -24,7 +25,7 @@
 
 1. 在 [Releases](../../releases/latest) 下载 `WallPort-版本号.dmg`；
 2. 打开 .dmg，把"壁坞"拖进"应用程序"文件夹，再从"应用程序"里打开（不要直接在 .dmg 里打开）；
-3. 壁坞出现在屏幕右上角的菜单栏。按欢迎页的步骤：扫码登录 Steam →（可选）导入 Wallpaper Engine 自带素材 → 同步订阅。
+3. 壁坞出现在屏幕右上角的菜单栏。按欢迎页的步骤：扫码登录 Steam（之后自动下载 Wallpaper Engine 自带素材）→ 同步订阅。
 
 **打开时提示"无法验证开发者"？** 没有用 Apple 开发者证书签名的版本会这样（Release 说明里会写这一版有没有经过苹果公证）。
 确认是从本仓库的 Releases 下载的以后：打开"系统设置 → 隐私与安全性"，在页面下方找到壁坞，点"仍要打开"。
@@ -38,8 +39,9 @@
 从创意工坊下载壁纸需要用你的 Steam 账号。推荐"扫码登录"：用手机上的 Steam 应用确认，不用在壁坞里输入密码。壁坞不保存密码，登录后的凭证加密存在你的 Mac 上，退出登录即删除。
 **壁坞用的是自己实现的 Steam 客户端（不是 Steam 官方软件），Valve 有可能限制这样登录的账号，请自行判断。**
 
-**"Wallpaper Engine 自带素材"是什么？必须导入吗？**
-不必须。壁坞自带一套自己写的兼容素材，不导入也能放场景壁纸，只是部分粒子、光效的样子和原版不同。想和 Windows 上完全一样，可以把你电脑上 Wallpaper Engine 安装目录里的 `assets` 文件夹拷过来，在欢迎页或菜单栏图标里导入。
+**"Wallpaper Engine 自带素材"是什么？要自己弄吗？**
+不用。场景壁纸要用 Wallpaper Engine 自带的着色器、贴图这些素材。你登录以后，壁坞会用**你的** Steam 账号从 Steam 下载你已拥有的 Wallpaper Engine 里的这部分文件（约 85 MB，Wallpaper Engine 更新时自动更新），场景壁纸就和原版一样。
+壁坞本身不带、不分发这些素材（它们是 Wallpaper Engine 的版权内容）。下好之前或者没登录时，用壁坞自己写的兼容素材，部分粒子、光效的样子和原版不同。也可以在菜单栏图标里手动导入从 Windows 上拷来的 `assets` 文件夹。
 
 **能放哪些壁纸？**
 场景、视频、网页三类。"应用程序"类壁纸是 Windows 程序，在 macOS 上没法运行。少数场景用到的效果还没实现（例如镜头视差），这些地方会和原版有差别。
@@ -59,7 +61,7 @@
 壁坞**不收集任何个人信息，不向开发者发送任何数据**：没有统计、广告或自动上报。
 
 - 设置、壁纸、登录凭证（加密）、缓存、日志都只存在你的 Mac 上的 `~/WallPort` 里；
-- 会连接的只有：Steam（登录、订阅、下载、浏览创意工坊）、GitHub（每天检查一次新版本，可以关）、以及网页壁纸自己要访问的网站（可以在菜单里禁止网页壁纸联网）；
+- 会连接的只有：Steam（登录、订阅、下载壁纸和 Wallpaper Engine 自带素材、浏览创意工坊）、GitHub（每天检查一次新版本，可以关）、以及网页壁纸自己要访问的网站（可以在菜单里禁止网页壁纸联网）；
 - 系统音频只在"跟着音乐律动"的壁纸播放时读取频谱，不录音、不保存；为了在桌面被挡住时暂停，会读取屏幕上窗口的位置（不读内容和标题）。
 
 完整的[隐私政策](App/Legal/Privacy.html)和[使用条款](App/Legal/Terms.html)在 App 的"帮助"菜单和欢迎页里可以打开。
@@ -95,7 +97,7 @@ open ~/WallPort/WallPort.app
 
 **Requirements**: macOS 14.6 or later, a Mac with Apple silicon (M1 or later; Intel Macs are not supported), and a Steam account that owns Wallpaper Engine to download from the Workshop.
 
-**Install**: download `WallPort-<version>.dmg` from [Releases](../../releases/latest), drag WallPort into Applications and open it from there. It lives in the menu bar; the welcome window walks you through signing in to Steam (QR code recommended), optionally importing Wallpaper Engine's assets, and syncing your subscriptions.
+**Install**: download `WallPort-<version>.dmg` from [Releases](../../releases/latest), drag WallPort into Applications and open it from there. It lives in the menu bar; the welcome window walks you through signing in to Steam (QR code recommended) and syncing your subscriptions. After you sign in, WallPort uses your account to download the built-in assets of the Wallpaper Engine you own from Steam (about 85 MB), so scene wallpapers look the same as on Windows; WallPort itself does not include or distribute these assets.
 If macOS says the developer cannot be verified (builds without an Apple Developer ID), open System Settings → Privacy & Security and click "Open Anyway" after making sure you downloaded it from this repository's Releases.
 
 **Signing in to Steam**: WallPort uses its own implementation of the Steam client, not the official Steam app. Your password is never stored; signing in with the QR code means you never type it into WallPort. **Valve may restrict accounts that sign in through unofficial clients — decide for yourself.**

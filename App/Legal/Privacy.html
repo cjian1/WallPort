@@ -29,7 +29,7 @@ code { font: 13px ui-monospace, Menlo, monospace; }
 <ul>
 <li><b>设置</b>（<code>Settings.plist</code>）：壁纸库文件夹、每块屏幕放的壁纸、性能和声音选项、筛选条件；上次登录用的 Steam 账户名称、你在 Steam 上订阅的条目编号和订阅时间（用来排序和显示"已订阅"）。</li>
 <li><b>Steam 登录凭证</b>（<code>Data/steam-session.json</code>）：登录成功后 Steam 发给壁坞的令牌，用这台 Mac 的硬件标识派生的密钥加密，文件只有你自己能读。<b>你的密码不会被保存</b>。在壁坞里"退出登录"会删除它。</li>
-<li><b>壁纸</b>：从创意工坊下载的壁纸（<code>Workshop/</code>）、你导入的 Wallpaper Engine 自带素材（<code>Assets/</code>）。</li>
+<li><b>壁纸和素材</b>：从创意工坊下载的壁纸（<code>Workshop/</code>）；Wallpaper Engine 自带素材（<code>Assets/</code>：登录后用你的账号从 Steam 下载的，或者你自己导入的）。</li>
 <li><b>缓存和截图</b>：缩略图、着色器、网页缓存（<code>Cache/</code>）；同步给系统壁纸用的当前画面截图（<code>Data/SystemWallpaper/</code>）。</li>
 <li><b>日志</b>（<code>Logs/</code>）：运行记录，里面可能有你的 Steam 账户名称和文件路径。日志只在本机，除非你自己导出发给别人。</li>
 </ul>
@@ -38,6 +38,7 @@ code { font: 13px ui-monospace, Menlo, monospace; }
 <h2>2. 会连接的网络服务</h2>
 <ul>
 <li><b>Steam（Valve）</b>：登录、读取你的订阅、订阅 / 取消订阅、下载壁纸时连接 Steam 的服务器（客户端协议服务器、<code>api.steampowered.com</code>）；
+登录后，用你的账号从 Steam 下载你已拥有的 Wallpaper Engine 里的自带素材（约 85 MB，Wallpaper Engine 更新时重新下载）；
 浏览创意工坊时读取 <code>steamcommunity.com</code> 的公开浏览页和 Steam 的图片、内容服务器。这些请求直接发给 Steam，
 壁坞的开发者看不到。Valve 如何处理这些数据，请看 <a href="https://store.steampowered.com/privacy_agreement/">Steam 隐私政策</a>。</li>
 <li><b>检查更新</b>：壁坞启动后和之后每天一次，向 GitHub（<code>api.github.com</code>）读取本项目最新发布的版本信息；下载新版本也在 GitHub 上。
@@ -87,7 +88,7 @@ There is no analytics, no advertising and no automatic crash reporting. Your set
 <ul>
 <li><b>Settings</b> (<code>Settings.plist</code>): library folders, the wallpaper on each display, performance and sound options, filters; the Steam account name you last signed in with, and the IDs and subscription dates of the items you subscribe to on Steam.</li>
 <li><b>Steam sign-in credential</b> (<code>Data/steam-session.json</code>): the token Steam issues after you sign in, encrypted with a key derived from this Mac's hardware identifier and readable only by you. <b>Your password is never stored.</b> Signing out in WallPort deletes it.</li>
-<li><b>Wallpapers</b>: items downloaded from the Workshop (<code>Workshop/</code>) and the Wallpaper Engine assets you import (<code>Assets/</code>).</li>
+<li><b>Wallpapers and assets</b>: items downloaded from the Workshop (<code>Workshop/</code>); Wallpaper Engine's built-in assets (<code>Assets/</code>), downloaded from Steam with your account after you sign in, or imported by you.</li>
 <li><b>Caches and snapshots</b>: thumbnails, shaders, web cache (<code>Cache/</code>); snapshots of the current frame used as the system wallpaper (<code>Data/SystemWallpaper/</code>).</li>
 <li><b>Logs</b> (<code>Logs/</code>): activity logs, which may contain your Steam account name and file paths. They stay on your Mac unless you export them yourself.</li>
 </ul>
@@ -95,6 +96,7 @@ There is no analytics, no advertising and no automatic crash reporting. Your set
 <h2>2. Network services WallPort connects to</h2>
 <ul>
 <li><b>Steam (Valve)</b>: signing in, reading your subscriptions, subscribing/unsubscribing and downloading use Steam's servers (client protocol servers, <code>api.steampowered.com</code>);
+after you sign in, WallPort uses your account to download the built-in assets of the copy of Wallpaper Engine you own (about 85 MB, again when Wallpaper Engine updates);
 browsing the Workshop reads public pages on <code>steamcommunity.com</code> and Steam's image and content servers. These requests go directly to Steam; WallPort's developer cannot see them.
 See the <a href="https://store.steampowered.com/privacy_agreement/">Steam Privacy Policy</a> for how Valve handles this data.</li>
 <li><b>Update check</b>: at launch and once a day, WallPort reads information about this project's latest release from GitHub (<code>api.github.com</code>); new versions are downloaded from GitHub too. The request carries only what every web request carries (your IP address, WallPort's version), no account or device identifier, and is handled by GitHub — the publisher cannot see it; see the <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub Privacy Statement</a>. You can turn off "Check for Updates Automatically" in the menu bar menu.</li>

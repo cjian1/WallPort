@@ -15,6 +15,11 @@ public enum EMsg: UInt32, Sendable {
     /// 取 depot 解密密钥（内容服务器上的分块要用它解密）
     case clientGetDepotDecryptionKey = 5438
     case clientGetDepotDecryptionKeyResponse = 5439
+    /// 应用信息（PICS）：先要访问令牌，再带着令牌要应用信息（depot 和清单编号，见 `SteamAppInfo`）
+    case clientPICSProductInfoRequest = 8903
+    case clientPICSProductInfoResponse = 8904
+    case clientPICSAccessTokenRequest = 8905
+    case clientPICSAccessTokenResponse = 8906
     /// 还没登录时调服务方法（认证会话就是这么做的）
     case serviceMethodCallFromClientNonAuthed = 9804
     /// 连上 CM 之后要先打个招呼，否则后面发的东西会被当成"没有凭据"

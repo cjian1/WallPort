@@ -67,7 +67,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         libraryFolders: { [weak self] in self?.libraryFolders.folders ?? [] },
         onDownloaded: { [weak self] folder in self?.workshopDidDownload(into: folder) },
         onUnsubscribed: { [weak self] folders in self?.offerToTrashUnsubscribed(folders) },
-        log: { [weak self] text in self?.log.write(text) })
+        log: { [weak self] text in self?.log.write(text) },
+        usesCustomAssets: { AppFolder.settings.string(forKey: Self.assetsDefaultsKey) != nil },
+        onEngineAssetsInstalled: { [weak self] in self?.engineAssetsDidChange() })
     private lazy var permissionPrimer = PermissionPrimer(log: log)
     private static let welcomeShownKey = "didShowWelcome"
 
@@ -532,6 +534,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(makeItem(String(localized: "立即自检"), #selector(probeNow)))
         menu.addItem(makeItem(String(localized: "打开日志"), #selector(openLog)))
         menu.addItem(makeItem(String(localized: "导出诊断信息…"), #selector(exportDiagnostics)))
+        if let progress = workshop.engineAssetsProgress {
+            let item = NSMenuItem(
+                title: String(localized: "正在从 Steam 下载 Wallpaper Engine 自带素材（\(Int(progress * 100))%）"),
+                action: nil, keyEquivalent: "")
+            menu.addItem(item)
+        } else {
+            let steam = makeItem(String(localized: "从 Steam 下载 Wallpaper Engine 自带素材"), #selector(downloadEngineAssetsFromSteam))
+            steam.toolTip = String(localized: "用你登录的 Steam 账号（要拥有 Wallpaper Engine）下载它的自带素材，场景壁纸就和原版一样。登录后没有素材时会自动下载。")
+            menu.addItem(steam)
+        }
         menu.addItem(makeItem(
             assetsDirectory == nil ? String(localized: "导入 Wallpaper Engine 自带素材…") : String(localized: "重新导入 Wallpaper Engine 自带素材…"),
             #selector(chooseAssetsDirectory)))
@@ -1205,7 +1217,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 + "挡住时暂停 \(settings.pausesWhenCovered ? "开" : "关")，按画面快慢自动降帧 \(settings.adaptsFrameRate ? "开" : "关")",
             "其它：声音 \(playAudio ? "开" : "关")，网页壁纸联网 \(allowWebNetwork ? "允许" : "禁止")，"
                 + "同步系统壁纸 \(syncSystemWallpaper ? "开" : "关")，窗口层级 \(controller?.level.title ?? "?")",
-            "WE 自带素材：\(assetsDirectory.map { "有（\((try? FileManager.default.contentsOfDirectory(atPath: $0.path).count) ?? 0) 个子文件夹）" } ?? "没有（用兼容素材）")",
+            "WE 自带素材：\(assetsDirectory.map { "有（\((try? FileManager.default.contentsOfDirectory(atPath: $0.path).count) ?? 0) 个子文件夹）" } ?? "没有（用兼容素材）")"
+                + (AppFolder.settings.string(forKey: WorkshopModel.engineAssetsVersionKey).map { "，从 Steam 下载的 \($0)" } ?? ""),
             "Steam：\(workshop.isLoggedIn ? "已登录" : "未登录")，订阅 \(workshop.subscribedIDs.count) 个",
             "壁纸库：\(libraryFolders.folders.count) 个文件夹" + (libraryWindow.map { "，\($0.model.summary)" } ?? ""),
             "",
@@ -1662,16 +1675,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 showAlert(String(localized: "没能拷贝 Wallpaper Engine 自带素材"), detail: failure)
                 return
             }
-            // 用统一文件夹里的那份（以前另外指定过的目录不再用）
-            assetsDirectory = nil
-            welcomeModel?.hasAssets = assetsDirectory != nil
-            failedScenes = [:]
+            // 自己导入的不再算"从 Steam 下载的"：以后不会被自动更新换掉
+            AppFolder.settings.removeObject(forKey: WorkshopModel.engineAssetsVersionKey)
             log.write("WE 自带素材：已就绪")
-            guard let controller else { return }
-            for display in controller.displays where controller.content(for: display.id) is SceneContent {
-                controller.reloadContent(for: display.id)
-            }
+            engineAssetsDidChange()
         }
+    }
+
+    /// `~/WallPort/Assets` 里的素材换过了（导入的、从 Steam 下载的）：用它（以前另外指定过的目录不再用），
+    /// 之前因为缺素材载入失败的场景、正在显示的场景都重新载入
+    private func engineAssetsDidChange() {
+        assetsDirectory = nil
+        welcomeModel?.hasAssets = assetsDirectory != nil
+        failedScenes = [:]
+        guard let controller else { return }
+        for display in controller.displays where controller.content(for: display.id) is SceneContent {
+            controller.reloadContent(for: display.id)
+        }
+    }
+
+    @objc private func downloadEngineAssetsFromSteam() {
+        workshop.syncEngineAssets(force: true)
+        if !workshop.isLoggedIn { showLibrary(selecting: nil) }
     }
 
     @objc private func useTestPattern(_ sender: NSMenuItem) {

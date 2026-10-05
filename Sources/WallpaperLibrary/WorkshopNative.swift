@@ -355,6 +355,106 @@ public actor WorkshopNative {
         }
     }
 
+    // MARK: - Wallpaper Engine 自带素材
+
+    /// Steam 上 WE 自带素材现在的版本："<depot>:<清单编号>"（WE 更新时会变）。用来判断要不要重新下载
+    public func engineAssetsVersion(session: SteamCMSession) async throws -> String {
+        let plan = try await engineAssetsPlan(session: session)
+        return "\(plan.depot):\(plan.manifestID)"
+    }
+
+    /// 用这个账号从 Steam 下载 WE 安装包里的 `assets/` 文件夹，整体换进 `target`（先下到旁边，成功了才替换）。
+    /// 账号要拥有 Wallpaper Engine（没有的话 Steam 不给 depot 密钥）。返回装好的版本（见 `engineAssetsVersion`）
+    public func downloadEngineAssets(
+        session: SteamCMSession, to target: URL, progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> String {
+        let plan = try await engineAssetsPlan(session: session)
+        do {
+            let total = max(1, plan.manifest.totalBytes)
+            try await UGCContentDownloader().install(
+                plan.manifest, at: target, hosts: plan.hosts, depotKey: plan.depotKey, concurrency: 8
+            ) { state in
+                progress?(Double(state.bytesDone) / Double(total))
+            }
+            return "\(plan.depot):\(plan.manifestID)"
+        } catch let error as CancellationError {
+            throw error
+        } catch {
+            throw Failure.failed(Self.describe(error))
+        }
+    }
+
+    private struct EngineAssetsPlan: Sendable {
+        let depot: UInt32
+        let manifestID: UInt64
+        /// 只剩 `assets/` 里的文件、路径已经去掉了这一级
+        let manifest: ContentManifest
+        let depotKey: [UInt8]
+        let hosts: [String]
+    }
+
+    /// 找出装着 `assets/` 的那个 depot：读应用信息 → 按顺序试 Windows（或不分系统）的 depot，
+    /// 要密钥和清单，清单里有 `assets/` 的就是它
+    private func engineAssetsPlan(session: SteamCMSession) async throws -> EngineAssetsPlan {
+        let appID = Self.appID
+        let found = try await withConnection(session) { [cellID] connection in
+            let info = try await connection.appInfo(appID: appID)
+            let candidates = info.depots.filter { depot in
+                depot.publicManifest != nil && !depot.fromOtherApp
+                    && (depot.osList.isEmpty || depot.osList.contains("windows"))
+            }
+            guard !candidates.isEmpty else {
+                throw Failure.failed(String(localized: "Steam 上的 Wallpaper Engine 信息里找不到可下载的内容"))
+            }
+            let serversBody = try await connection.call(
+                SteamServiceCall.method("ContentServerDirectory.GetServersForSteamPipe"),
+                request: SteamServiceCall.contentServers(cellID: cellID))
+            let hosts = SteamContentServer.list(from: serversBody)
+                .filter { $0.supportsHTTPS && $0.serves(appID: appID) }.map(\.host)
+                + ["steampipe.akamaized.net", "cache1-lax1.steamcontent.com"]
+            var keys: [(depot: SteamAppInfo.Depot, key: [UInt8], requestCode: UInt64)] = []
+            var denied = false
+            for depot in candidates {
+                guard let manifestID = depot.publicManifest else { continue }
+                do {
+                    let key = try await connection.depotDecryptionKey(appID: appID, depotID: depot.id)
+                    let code = try await connection.manifestRequestCode(
+                        appID: appID, depotID: depot.id, manifestID: manifestID)
+                    keys.append((depot, key, code))
+                } catch let error as SteamCMError where error.eresult != nil && !error.isConnectionLoss {
+                    denied = true   // 这个 depot 没有权限（账号没买 WE，或者是没买的 DLC）
+                }
+            }
+            if keys.isEmpty {
+                throw Failure.failed(denied
+                    ? String(localized: "这个 Steam 账号没有 Wallpaper Engine，下载不了它的自带素材")
+                    : String(localized: "没能从 Steam 取到 Wallpaper Engine 的下载信息"))
+            }
+            return (keys: keys, hosts: hosts)
+        }
+        let downloader = UGCContentDownloader()
+        var lastError: (any Error)?
+        for candidate in found.keys {
+            guard let manifestID = candidate.depot.publicManifest else { continue }
+            do {
+                let manifest = try await downloader.manifest(
+                    depot: candidate.depot.id, manifestID: manifestID, requestCode: candidate.requestCode,
+                    hosts: found.hosts, depotKey: candidate.key)
+                let assets = manifest.subtree("assets")
+                guard assets.files.contains(where: { !$0.isDirectory }) else { continue }
+                return EngineAssetsPlan(
+                    depot: candidate.depot.id, manifestID: manifestID, manifest: assets, depotKey: candidate.key,
+                    hosts: found.hosts)
+            } catch let error as CancellationError {
+                throw error
+            } catch {
+                lastError = error
+            }
+        }
+        throw Failure.failed(lastError.map(Self.describe)
+            ?? String(localized: "Wallpaper Engine 的安装包里没找到 assets 文件夹"))
+    }
+
     // MARK: - 连接
 
     /// 在已登录的连接上做一件事；连接断了（或等回包超时）就重新登一次 CM 再试一次

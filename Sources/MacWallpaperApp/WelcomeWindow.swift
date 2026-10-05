@@ -70,15 +70,19 @@ struct WelcomeView: View {
                 }
             }
             step(
-                "2. Wallpaper Engine 自带素材（可选）",
-                "壁坞自带一套兼容素材，不导入也能放场景壁纸，只是部分粒子、光效的样子和原版不同。想要和 Wallpaper Engine 完全一样，把 Windows 电脑上 Wallpaper Engine 安装目录里的 assets 文件夹拷到这台 Mac（U 盘、网盘都行），在这里选一下，壁坞会拷进自己的文件夹。"
+                "2. Wallpaper Engine 自带素材（自动）",
+                "登录以后，壁坞会用你的账号从 Steam 下载 Wallpaper Engine 的自带素材（账号拥有 Wallpaper Engine 就行，约 85 MB），场景壁纸就和原版一样。下好之前、或者没登录时，用壁坞自带的兼容素材，部分粒子、光效的样子和原版不同。也可以手动选从 Windows 上拷来的 assets 文件夹。"
             ) {
-                Button("选择 assets 文件夹…", action: onChooseAssets).disabled(model.isImportingAssets)
-                if model.isImportingAssets {
+                if let progress = workshop.engineAssetsProgress {
+                    ProgressView(value: progress).frame(width: 160)
+                    Text("正在从 Steam 下载…\(Int(progress * 100))%").foregroundStyle(.secondary).monospacedDigit()
+                } else if model.isImportingAssets {
                     ProgressView().controlSize(.small)
                     Text("正在拷贝…").foregroundStyle(.secondary)
                 } else {
-                    Text(model.hasAssets ? "已导入" : "现在用壁坞自带的兼容素材").foregroundStyle(.secondary)
+                    Button("选择 assets 文件夹…", action: onChooseAssets)
+                    Text(model.hasAssets ? "已就绪" : workshop.isLoggedIn ? "现在用壁坞自带的兼容素材" : "登录后自动下载")
+                        .foregroundStyle(.secondary)
                 }
             }
             step(
