@@ -219,8 +219,30 @@ import WallpaperLibrary
         Self.snapshot(window, name: "welcome")
     }
 
+    /// 新用户第一次打开时的欢迎页（没登录、没素材、没导入）：放得下；README 里的截图也是这一张
+    @Test func welcomeOnFirstRunFits() async throws {
+        let workshop = WorkshopModel(libraryFolders: { [] }, onDownloaded: { _ in }, onUnsubscribed: { _ in })
+        let model = WelcomeModel(hasAssets: false, libraryFolderCount: 0)
+        let view = WelcomeView(
+            model: model, workshop: workshop, onSignIn: {}, onChooseAssets: {}, onAddLibraryFolder: {}, onOpenLibrary: {})
+        let size = NSHostingView(rootView: view).fittingSize
+        #expect(size.width <= 600 && size.height < 760, "欢迎页太大：\(size)")
+        let window = Self.host(view, size: size)
+        defer { window.close() }
+        try? await Task.sleep(for: .milliseconds(200))
+        Self.snapshot(window, name: "welcome-first-run")
+    }
+
+    /// 测试进程不在 .app 里，图标是系统默认的文件夹；截图时换成壁坞自己的
+    private static func useAppIcon() {
+        let icon = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("App/AppIcon.icns")
+        if let image = NSImage(contentsOf: icon) { NSApplication.shared.applicationIconImage = image }
+    }
+
     /// 登录框：扫码、账号密码和底下的说明（和 Valve 的关系、风险、隐私政策链接）都放得下，不出框
     @Test func loginSheetFitsItsContent() async throws {
+        Self.useAppIcon()
         let workshop = WorkshopModel(libraryFolders: { [] }, onDownloaded: { _ in }, onUnsubscribed: { _ in })
         let view = SteamLoginSheet(model: workshop)
         let size = NSHostingView(rootView: view).fittingSize

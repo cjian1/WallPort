@@ -18,17 +18,17 @@ import Testing
             let project = URL(fileURLWithPath: "/Users/me/Documents/wp/123", isDirectory: true)
             store.setSource(.video(video), forDisplay: "B")
             store.setSource(.project(project), forDisplay: "A")
-            store.setSource(.testPattern, forDisplay: "C")
+            store.setSource(.systemWallpaper, forDisplay: "C")
             var all = defaults.dictionary(forKey: "displayAssignments") ?? [:]
             all["D"] = "scene:/whatever"
             defaults.set(all, forKey: "displayAssignments")
-            #expect(store.storedSources == [.project(project), .video(video), .testPattern])
+            #expect(store.storedSources == [.project(project), .video(video), .systemWallpaper])
         }
     }
 
     @Test func unknownDisplayDefaultsToTestPattern() {
         withStore { store, _ in
-            #expect(store.source(forDisplay: "never-seen") == .testPattern)
+            #expect(store.source(forDisplay: "never-seen") == .systemWallpaper)
         }
     }
 
@@ -36,25 +36,25 @@ import Testing
         withStore { store, _ in
             let video = URL(fileURLWithPath: "/Users/me/Movies/海浪 loop.mp4")
             store.setSource(.video(video), forDisplay: "A")
-            store.setSource(.testPattern, forDisplay: "B")
+            store.setSource(.systemWallpaper, forDisplay: "B")
             #expect(store.source(forDisplay: "A") == .video(video))
-            #expect(store.source(forDisplay: "B") == .testPattern)
+            #expect(store.source(forDisplay: "B") == .systemWallpaper)
         }
     }
 
     @Test func laterAssignmentReplacesEarlierOne() {
         withStore { store, _ in
             store.setSource(.video(URL(fileURLWithPath: "/a.mp4")), forDisplay: "A")
-            store.setSource(.testPattern, forDisplay: "A")
-            #expect(store.source(forDisplay: "A") == .testPattern)
+            store.setSource(.systemWallpaper, forDisplay: "A")
+            #expect(store.source(forDisplay: "A") == .systemWallpaper)
         }
     }
 
     @Test func unreadableStoredValueFallsBackToTestPattern() {
         withStore { store, defaults in
             defaults.set(["A": "scene:/whatever", "B": "video:"], forKey: "displayAssignments")
-            #expect(store.source(forDisplay: "A") == .testPattern)
-            #expect(store.source(forDisplay: "B") == .testPattern)
+            #expect(store.source(forDisplay: "A") == .systemWallpaper)
+            #expect(store.source(forDisplay: "B") == .systemWallpaper)
         }
     }
 
@@ -73,11 +73,11 @@ import Testing
         }
     }
 
-    /// 主显示器没设置过时，退到别的屏幕上已经设过的；测试图案不算数
+    /// 主显示器没设置过时，退到别的屏幕上已经设过的；"不放动态壁纸"不算数
     @Test func inheritanceSkipsTheTestPatternAndPrefersTheMainDisplay() {
         withStore { store, _ in
             let video = URL(fileURLWithPath: "/Volumes/盘/a.mov")
-            store.setSource(.testPattern, forDisplay: "主屏")
+            store.setSource(.systemWallpaper, forDisplay: "主屏")
             store.setSource(.video(video), forDisplay: "侧屏")
             #expect(store.inheritedSource(forDisplay: "新屏", mainDisplayKey: "主屏") == .video(video))
 
@@ -88,14 +88,14 @@ import Testing
         }
     }
 
-    /// 全都没设置过（或者都设成测试图案）时还是测试图案
+    /// 全都没设置过（或者都设成不放）时还是不放动态壁纸
     @Test func inheritanceFallsBackToTheTestPattern() {
         withStore { store, _ in
-            #expect(store.inheritedSource(forDisplay: "新屏", mainDisplayKey: nil) == .testPattern)
-            store.setSource(.testPattern, forDisplay: "主屏")
-            #expect(store.inheritedSource(forDisplay: "新屏", mainDisplayKey: "主屏") == .testPattern)
+            #expect(store.inheritedSource(forDisplay: "新屏", mainDisplayKey: nil) == .systemWallpaper)
+            store.setSource(.systemWallpaper, forDisplay: "主屏")
+            #expect(store.inheritedSource(forDisplay: "新屏", mainDisplayKey: "主屏") == .systemWallpaper)
             // 已经单独设置过的屏幕不会被自己影响
-            #expect(store.inheritedSource(forDisplay: "主屏", mainDisplayKey: "主屏") == .testPattern)
+            #expect(store.inheritedSource(forDisplay: "主屏", mainDisplayKey: "主屏") == .systemWallpaper)
         }
     }
 
@@ -131,4 +131,12 @@ import Testing
         #expect(store.hidden(for: a).isEmpty)
         #expect(store.hidden(for: b) == ["text:5"])
     }
+
+    /// 以前存的 "testPattern"（那时没设壁纸的屏幕显示测试图案）照样认得，当作不放动态壁纸；新写的是 "system"
+    @Test func oldTestPatternValueMeansSystemWallpaper() {
+        #expect(WallpaperSource(storageValue: "testPattern") == .systemWallpaper)
+        #expect(WallpaperSource(storageValue: "system") == .systemWallpaper)
+        #expect(WallpaperSource.systemWallpaper.storageValue == "system")
+    }
+
 }

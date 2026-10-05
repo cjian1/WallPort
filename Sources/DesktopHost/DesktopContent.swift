@@ -25,6 +25,10 @@ public protocol DesktopContent: AnyObject {
     /// 控制器不会拿它换掉屏幕上已有的画面，也不会因为它把刚建的窗口显示出来——
     /// 用户看到的一直是原来的画面，直到真正的内容画出第一帧
     var isPlaceholder: Bool { get }
+
+    /// 这块屏幕不放动态壁纸、显示用户原来的系统壁纸（见 `SystemWallpaperContent`）：
+    /// 控制器让窗口保持全透明，系统壁纸同步不截图、换回原来的那张
+    var showsSystemWallpaper: Bool { get }
 }
 
 extension DesktopContent {
@@ -36,4 +40,18 @@ extension DesktopContent {
     public func snapshot() async -> CGImage? { nil }
 
     public var isPlaceholder: Bool { false }
+
+    public var showsSystemWallpaper: Bool { false }
+}
+
+/// "不放动态壁纸"：这块屏幕显示用户原来的系统壁纸（壁纸库还是空的、或者用户选了不放）。
+/// 视图是透明的、什么也不画；窗口也保持全透明，桌面上露出来的就是系统自己的壁纸
+public final class SystemWallpaperContent: DesktopContent {
+    public let view = NSView()
+
+    public init() {}
+
+    public var showsSystemWallpaper: Bool { true }
+    public func displayDidChange(_ display: DisplaySnapshot) {}
+    public func visibilityDidChange(isVisible: Bool) {}
 }

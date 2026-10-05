@@ -209,7 +209,6 @@
 "退出" = "Quit";
 
 /* AppDelegate.swift */
-"当前：测试图案" = "Current: Test Pattern";
 
 /* AppDelegate.swift */
 "当前：" = "Current: ";
@@ -224,7 +223,6 @@
 "选择壁纸项目文件夹…" = "Choose Wallpaper Project Folder…";
 
 /* AppDelegate.swift */
-"使用测试图案" = "Use Test Pattern";
 
 /* AppDelegate.swift */
 "壁纸设置…" = "Wallpaper Settings…";
@@ -1418,3 +1416,5 @@
 "登录以后，壁坞会用你的账号从 Steam 下载 Wallpaper Engine 的自带素材（账号拥有 Wallpaper Engine 就行，约 85 MB），场景壁纸就和原版一样。下好之前、或者没登录时，用壁坞自带的兼容素材，部分粒子、光效的样子和原版不同。也可以手动选从 Windows 上拷来的 assets 文件夹。" = "After you sign in, WallPort uses your account to download Wallpaper Engine’s built-in assets from Steam (your account just needs to own Wallpaper Engine; about 85 MB), so scene wallpapers look the same as in Wallpaper Engine. Until then, or without signing in, WallPort uses its own compatible assets, and some particles and light effects look different. You can also choose an assets folder copied from Windows.";
 "登录后自动下载" = "Downloaded automatically after you sign in";
 "这个 Steam 账号没有 Wallpaper Engine，下载不了它的自带素材" = "This Steam account doesn’t own Wallpaper Engine, so its built-in assets can’t be downloaded";
+"不放动态壁纸（用系统壁纸）" = "No Live Wallpaper (Use System Wallpaper)";
+"当前：系统壁纸（没放动态壁纸）" = "Current: System Wallpaper (no live wallpaper)";

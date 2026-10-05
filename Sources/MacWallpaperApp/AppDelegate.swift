@@ -210,7 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for source in assignments.storedSources {
             switch source {
             case .video(let url), .project(let url): locations.append(url)
-            case .testPattern: break
+            case .systemWallpaper: break
             }
         }
         if let path = lockScreenWallpaperPath { locations.append(URL(fileURLWithPath: path)) }
@@ -241,8 +241,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func makeContent(for display: DisplaySnapshot) -> any DesktopContent {
         switch resolvedSource(for: display) {
-        case .testPattern:
-            return makeTestPattern(for: display)
+        case .systemWallpaper:
+            // 没设壁纸（壁纸库还是空的、或者用户选了不放）：桌面上留着用户原来的系统壁纸
+            return SystemWallpaperContent()
         case .video(let url):
             return makeVideo(url, for: display)
         case .project(let folder):
@@ -252,14 +253,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// 这块屏幕该放什么。单独设置过的用它自己那份；没设置过（刚插上的 HDMI / DP 副屏、或者
     /// 以前从没分配过的屏幕）就**沿用主显示器上现在用的那张**，并记成它自己的设置，
-    /// 免得新屏幕显示默认的测试图案
+    /// 免得新屏幕空着（只显示系统壁纸）
     private func resolvedSource(for display: DisplaySnapshot) -> WallpaperSource {
         if let stored = assignments.storedSource(forDisplay: display.stableKey) { return stored }
         let mainKey = controller?.displays.first { $0.id == CGMainDisplayID() }?.stableKey
         let inherited = assignments.inheritedSource(forDisplay: display.stableKey, mainDisplayKey: mainKey)
-        // 只在真继承到东西时记下来；继承不到（还只有测试图案）就先不写，
+        // 只在真继承到东西时记下来；继承不到（哪块屏幕都还没设壁纸）就先不写，
         // 这样以后主屏设了壁纸，这块屏还能跟上
-        if inherited != .testPattern {
+        if inherited != .systemWallpaper {
             assignments.setSource(inherited, forDisplay: display.stableKey)
             log.write("显示器 \(display.id) 没有单独设置过，沿用当前壁纸：\(inherited.storageValue)")
         }
@@ -559,7 +560,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         let current: String
         switch assignments.source(forDisplay: display.stableKey) {
-        case .testPattern: current = String(localized: "当前：测试图案")
+        case .systemWallpaper: current = String(localized: "当前：系统壁纸（没放动态壁纸）")
         case .video(let url): current = String(localized: "当前：\(url.lastPathComponent)")
         case .project(let folder):
             current = String(localized: "当前：") + ((try? projects[Self.key(folder)]?.get())?.title ?? folder.lastPathComponent)
@@ -569,7 +570,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(makeItem(String(localized: "从壁纸库选择…"), #selector(openLibrary(_:)), display: display.id))
         menu.addItem(makeItem(String(localized: "选择视频…"), #selector(chooseVideo(_:)), display: display.id))
         menu.addItem(makeItem(String(localized: "选择壁纸项目文件夹…"), #selector(chooseProject(_:)), display: display.id))
-        menu.addItem(makeItem(String(localized: "使用测试图案"), #selector(useTestPattern(_:)), display: display.id))
+        menu.addItem(makeItem(String(localized: "不放动态壁纸（用系统壁纸）"), #selector(useSystemWallpaper(_:)), display: display.id))
         if case .project(let folder) = assignments.source(forDisplay: display.stableKey),
            let project = try? projects[Self.key(folder)]?.get(), project.kind == .scene || project.kind == .web,
            project.properties.contains(where: \.isEditable) {
@@ -826,7 +827,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// 把这些项目文件夹移到废纸篓；正在用它们的显示器换成壁纸库里剩下的下一张（没有就回到测试图案）
+    /// 把这些项目文件夹移到废纸篓；正在用它们的显示器换成壁纸库里剩下的下一张（没有就不放动态壁纸，露出系统壁纸）
     @discardableResult
     /// - Parameter library: 换"下一张"时按哪个列表的顺序；nil 时用壁纸库现在的列表（窗口没开就现扫）
     private func moveToTrash(_ folders: [URL], library: [WallpaperProject]? = nil) -> Bool {
@@ -851,7 +852,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if let next = PlaylistPicker.replacement(for: folder, deleting: trashed, in: library) {
                 apply(next, to: display, reportFailure: false)
             } else {
-                assignments.setSource(.testPattern, forDisplay: display.stableKey)
+                assignments.setSource(.systemWallpaper, forDisplay: display.stableKey)
                 controller?.reloadContent(for: display.id)
             }
         }
@@ -1227,7 +1228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for display in controller?.displays ?? [] {
             let source = assignments.source(forDisplay: display.stableKey)
             let what: String = switch source {
-            case .testPattern: "测试图案"
+            case .systemWallpaper: "系统壁纸（没放动态壁纸）"
             case .video(let url): "视频 \(url.pathExtension)"
             case .project(let url): "项目 \(url.lastPathComponent)"
             }
@@ -1699,10 +1700,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !workshop.isLoggedIn { showLibrary(selecting: nil) }
     }
 
-    @objc private func useTestPattern(_ sender: NSMenuItem) {
+    /// 这块屏幕不放动态壁纸：露出用户原来的系统壁纸
+    @objc private func useSystemWallpaper(_ sender: NSMenuItem) {
         guard let display = display(from: sender) else { return }
-        assignments.setSource(.testPattern, forDisplay: display.stableKey)
-        log.write("显示器 \(display.id) 改用测试图案")
+        assignments.setSource(.systemWallpaper, forDisplay: display.stableKey)
+        log.write("显示器 \(display.id) 不放动态壁纸，改用系统壁纸")
         controller?.reloadContent(for: display.id)
         refreshLibraryCurrent()
     }

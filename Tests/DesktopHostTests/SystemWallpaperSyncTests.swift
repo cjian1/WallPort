@@ -160,6 +160,25 @@ private final class FakeDesktop: DesktopPictureStore {
         }
     }
 
+    /// 屏幕不放动态壁纸时，同步不截图；之前同步成过当前画面的，换回用户原来的那张
+    @Test func screensWithoutWallpaperGetTheirOriginalBack() throws {
+        try withSync { sync, desktop, _ in
+            sync.apply(makeImage(), to: display)
+            #expect(desktop.pictures[display.id] != original, "先同步成了当前画面")
+            // 窗口放在屏幕外面（和 display 同一个编号，原壁纸按编号记）
+            let offscreen = DisplaySnapshot(
+                id: display.id, name: "测试屏", frame: CGRect(x: -30_000, y: -30_000, width: 8, height: 8), scale: 1)
+            let controller = WallpaperController(
+                level: .desktop, log: EventLog(fileURL: directory.appendingPathComponent("controller.txt"))
+            ) { _ in SystemWallpaperContent() }
+            controller.displaySource = { [offscreen] }
+            controller.start()
+            defer { controller.stop() }
+            controller.systemWallpaperSync = sync
+            #expect(desktop.pictures[display.id] == original, "不放动态壁纸：换回原来的系统壁纸")
+        }
+    }
+
     @Test func restoreWithoutApplyChangesNothing() throws {
         try withSync { sync, desktop, _ in
             sync.restore(displays: [display])

@@ -75,6 +75,33 @@ import Testing
         #expect(second.view.superview != nil, "新画面接着显示")
     }
 
+    /// 不放动态壁纸（壁纸库还是空的）：窗口一直全透明，桌面上是系统壁纸；换上真正的壁纸、画出第一帧才显示；
+    /// 再换回"不放"又变回全透明
+    @Test func systemWallpaperKeepsTheWindowTransparent() {
+        let real = FakeContent()
+        var queue: [any DesktopContent] = [SystemWallpaperContent(), real, SystemWallpaperContent()]
+        let log = EventLog(
+            fileURL: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("handoff-test.log"))
+        let controller = WallpaperController(level: .desktop, log: log) { _ in queue.removeFirst() }
+        controller.displaySource = { [self.fakeDisplay()] }
+        controller.start()
+        defer { controller.stop() }
+        let id = fakeDisplay().id
+        #expect(controller.content(for: id)?.showsSystemWallpaper == true)
+        #expect(!controller.isRevealed(id), "不放动态壁纸时窗口不显示，露出系统壁纸")
+
+        controller.reloadContent(for: id)
+        #expect(!controller.isRevealed(id), "新壁纸还没画出第一帧：继续露着系统壁纸")
+        real.becomeReady()
+        #expect(controller.content(for: id) === real)
+        #expect(controller.isRevealed(id), "画出来了，显示窗口")
+
+        controller.reloadContent(for: id)
+        #expect(controller.content(for: id)?.showsSystemWallpaper == true)
+        #expect(!controller.isRevealed(id), "换回不放动态壁纸：窗口又变全透明")
+        #expect(real.tearDownCount == 1)
+    }
+
     /// 新内容一直画不出来（例如坏掉的视频）：到点也要换，不能一直留着旧画面
     @Test func handoffGivesUpAfterTimeout() async throws {
         let first = FakeContent()

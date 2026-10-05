@@ -229,14 +229,16 @@ public final class WallpaperController: NSObject {
         pending.content.tearDown()
     }
 
-    /// 把刚建时全透明的窗口显示出来（第一份真正的内容已经画出来了，或者等它超时了）
+    /// 把刚建时全透明的窗口显示出来（第一份真正的内容已经画出来了，或者等它超时了）。
+    /// 现在的内容是"不放动态壁纸"时反过来：窗口保持（或者变回）全透明，露出系统壁纸
     private func reveal(_ id: CGDirectDisplayID) {
         guard let slot = slots[id] else { return }
         slot.revealTimeout?.cancel()
         slots[id]?.revealTimeout = nil
-        guard slot.window.alphaValue < 1 else { return }
-        slot.window.alphaValue = 1
-        log.write("显示器 \(id) 壁纸就绪，显示窗口")
+        let alpha: CGFloat = slot.content.showsSystemWallpaper ? 0 : 1
+        guard slot.window.alphaValue != alpha else { return }
+        slot.window.alphaValue = alpha
+        log.write(alpha == 1 ? "显示器 \(id) 壁纸就绪，显示窗口" : "显示器 \(id) 不放动态壁纸，露出系统壁纸")
     }
 
     /// 窗口还是全透明的（第一份真正的内容还没画出来）。测试用
@@ -452,7 +454,12 @@ public final class WallpaperController: NSObject {
     ) {
         snapshotTasks[id]?.cancel()
         // 占位内容不同步成系统壁纸（它不是用户选的壁纸）
-        guard systemWallpaperSync != nil, !content.isPlaceholder else { return }
+        guard let sync = systemWallpaperSync, !content.isPlaceholder else { return }
+        // 不放动态壁纸：系统壁纸就是桌面上看到的那张，不截图；之前同步过当前画面的，换回用户原来的
+        if content.showsSystemWallpaper {
+            if let display = displays.first(where: { $0.id == id }) { sync.restore(displays: [display]) }
+            return
+        }
         snapshotTasks[id] = Task { [weak self] in
             try? await Task.sleep(for: delay)
             guard !Task.isCancelled else { return }
