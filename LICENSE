@@ -19,11 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-This license covers WallPort's own source code. Third-party code in Vendor/
-(glslang, SPIRV-Cross, zstd, LZMA SDK) and the fonts in App/CompatFonts/ are
-distributed under their own licenses, included next to them.
-"Wallpaper Engine" and "Steam" are trademarks of their respective owners;
-WallPort is not affiliated with them.
