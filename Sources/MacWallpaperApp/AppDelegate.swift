@@ -46,6 +46,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var updateTimer: Timer?
     /// 这次运行已经提示过的新版本（"以后再说"之后这次运行不再提示）
     private var announcedUpdateVersion: String?
+    /// 下载好、核对过、等着装上的新版本（见 `UpdateInstaller`）
+    private var preparedUpdate: UpdateInstaller.Prepared?
+    /// 正在后台下载的新版本
+    private var downloadingUpdateVersion: String?
+    /// 用户选了"退出时更新"：退出时把新版换上去（不重新打开）
+    private var installsUpdateOnQuit = false
     private var lastRotation = Date()
     private var playlistRandom = SystemRandomNumberGenerator()
     private let performanceStore = PerformanceStore()
@@ -228,6 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        installPreparedUpdateOnQuit()
         // 应用不在运行时，桌面应该是用户原来的壁纸；恢复要在 stop 之前，stop 会清空显示器列表
         if let controller, controller.systemWallpaperSync != nil {
             systemWallpaper.restore(displays: controller.displays)
@@ -507,11 +514,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(makeItem(String(localized: "首次使用提示…"), #selector(showWelcomeAgain)))
         menu.addItem(makeItem(String(localized: "关于\(MainMenu.appName)…"), #selector(showAbout)))
         if updateRepository != nil {
+            if let preparedUpdate {
+                menu.addItem(makeItem(
+                    String(localized: "更新到 \(preparedUpdate.version) 并重新打开"), #selector(installPreparedUpdateNow)))
+            } else if let downloadingUpdateVersion {
+                let downloading = NSMenuItem(
+                    title: String(localized: "正在下载新版本 \(downloadingUpdateVersion)…"), action: nil, keyEquivalent: "")
+                downloading.isEnabled = false
+                menu.addItem(downloading)
+            }
             menu.addItem(makeItem(String(localized: "检查更新…"), #selector(checkForUpdatesNow)))
             let automatic = makeItem(String(localized: "自动检查更新"), #selector(toggleAutomaticUpdateChecks))
             automatic.state = checksForUpdatesAutomatically ? .on : .off
             automatic.toolTip = String(localized: "每天向 GitHub 读一次最新版本的信息（会用到你的网络地址，不带任何账号信息）。关掉以后只在点「检查更新…」时检查。")
             menu.addItem(automatic)
+            let download = makeItem(String(localized: "自动下载更新"), #selector(toggleAutomaticUpdateDownloads))
+            download.state = downloadsUpdatesAutomatically ? .on : .off
+            download.toolTip = String(localized: "发现新版本时在后台从 GitHub 下载安装包、核对好，再问你现在更新还是退出时更新。关掉以后发现新版本只提示。")
+            menu.addItem(download)
         }
         menu.addItem(.separator())
 
@@ -1100,6 +1120,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 启动 10 秒后查一次（不和壁纸构建抢），之后每 24 小时一次
     private func configureUpdateChecks() {
         guard updateRepository != nil else { return }
+        // 上次下载了没装上（选了"退出时更新"却没正常退出、或者装的时候失败了）留下的：清掉，需要时重新下
+        let leftovers = Self.updateWorkDirectory
+        Task.detached(priority: .utility) { try? FileManager.default.removeItem(at: leftovers) }
         Task {
             try? await Task.sleep(for: .seconds(10))
             await checkForUpdates(manual: false)
@@ -1110,6 +1133,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private static let automaticUpdateChecksKey = "checksForUpdatesAutomatically"
+    private static let automaticUpdateDownloadsKey = "downloadsUpdatesAutomatically"
+
+    /// 下载的安装包、拷出来的新版放在这里，装好就删
+    private static var updateWorkDirectory: URL { AppFolder.cache.appendingPathComponent("Updates", isDirectory: true) }
 
     /// 自动检查更新（默认开）。关掉以后只在手动点"检查更新…"时连 GitHub
     private var checksForUpdatesAutomatically: Bool {
@@ -1117,16 +1144,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         set { AppFolder.settings.set(newValue, forKey: Self.automaticUpdateChecksKey) }
     }
 
+    /// 自动下载更新（默认开）：自动检查发现新版本时在后台下载、核对好，再问现在更新还是退出时更新
+    private var downloadsUpdatesAutomatically: Bool {
+        get { AppFolder.settings.object(forKey: Self.automaticUpdateDownloadsKey) as? Bool ?? true }
+        set { AppFolder.settings.set(newValue, forKey: Self.automaticUpdateDownloadsKey) }
+    }
+
     @objc private func toggleAutomaticUpdateChecks() {
         checksForUpdatesAutomatically.toggle()
         log.write("检查更新：自动检查\(checksForUpdatesAutomatically ? "开" : "关")")
+    }
+
+    @objc private func toggleAutomaticUpdateDownloads() {
+        downloadsUpdatesAutomatically.toggle()
+        log.write("检查更新：自动下载\(downloadsUpdatesAutomatically ? "开" : "关")")
     }
 
     @objc private func checkForUpdatesNow() {
         Task { await checkForUpdates(manual: true) }
     }
 
-    /// 有新版本就问一句：下载（打开下载页）/ 以后再说 / 跳过这个版本。手动检查时没有新版本、出错也告诉用户
+    @objc private func installPreparedUpdateNow() {
+        if let preparedUpdate { installUpdate(preparedUpdate) }
+    }
+
+    /// 有新版本时：能自动更新的（发布里有安装包和校验文件、App 所在的位置能替换），自动检查时直接在后台下载好再问；
+    /// 手动检查时问一句"下载并更新 / 以后再说 / 跳过"。不能自动更新的照旧打开发布页。
+    /// 手动检查时没有新版本、出错也告诉用户
     private func checkForUpdates(manual: Bool) async {
         guard let repository = updateRepository, manual || checksForUpdatesAutomatically else { return }
         let info: UpdateInfo
@@ -1144,23 +1188,165 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             return
         }
+        // 已经下载好了：直接问装不装
+        if let preparedUpdate, preparedUpdate.version == update.version {
+            if manual || announcedUpdateVersion != update.version {
+                announcedUpdateVersion = update.version
+                offerToInstall(preparedUpdate, notes: update.notes)
+            }
+            return
+        }
+        if downloadingUpdateVersion != nil {
+            if manual {
+                showAlert(
+                    String(localized: "正在下载新版本"),
+                    detail: String(localized: "下载、核对好以后会问你什么时候更新。"))
+            }
+            return
+        }
+        let blocker = update.package == nil
+            ? String(localized: "这个版本的发布里没有安装包") : UpdateInstaller.replacementBlocker(for: Bundle.main.bundleURL)
+        if let blocker { log.write("检查更新：\(update.version) 不能自动更新（\(blocker)）") }
+        if !manual, downloadsUpdatesAutomatically, blocker == nil {
+            log.write("检查更新：有新版本 \(update.version)，在后台下载")
+            downloadUpdate(update, installImmediately: false)
+            return
+        }
         guard manual || announcedUpdateVersion != update.version else { return }
         announcedUpdateVersion = update.version
         log.write("检查更新：有新版本 \(update.version)")
         let alert = NSAlert()
         alert.messageText = String(localized: "\(MainMenu.appName) 有新版本 \(update.version)")
-        // GitHub 的更新说明可能很长（Markdown）：提示框里只放开头一段，全文在发布页上
-        let notes = update.notes.map { $0.count > 600 ? String($0.prefix(600)) + "…" : $0 }
-        alert.informativeText = (notes.map { $0 + "\n\n" } ?? "")
-            + String(localized: "下载后把新的\(MainMenu.appName)拖进「应用程序」替换旧的；设置和壁纸都在 ~/WallPort 里，不受影响。")
-        alert.addButton(withTitle: String(localized: "下载"))
+        let howTo = blocker == nil
+            ? String(localized: "点「下载并更新」会在后台下载、核对，装好后重新打开\(MainMenu.appName)（壁纸会停一两秒）。设置和壁纸都在 ~/WallPort 里，不受影响。")
+            : String(localized: "下载后把新的\(MainMenu.appName)拖进「应用程序」替换旧的；设置和壁纸都在 ~/WallPort 里，不受影响。")
+        alert.informativeText = Self.excerpt(update.notes) + howTo
+        alert.addButton(withTitle: blocker == nil ? String(localized: "下载并更新") : String(localized: "下载"))
         alert.addButton(withTitle: String(localized: "以后再说"))
         alert.addButton(withTitle: String(localized: "跳过这个版本"))
         NSApp.activate()
         switch alert.runModal() {
-        case .alertFirstButtonReturn: NSWorkspace.shared.open(update.url)
+        case .alertFirstButtonReturn:
+            if blocker == nil { downloadUpdate(update, installImmediately: true) } else { NSWorkspace.shared.open(update.url) }
         case .alertThirdButtonReturn: AppFolder.settings.set(update.version, forKey: Self.skippedUpdateKey)
         default: break
+        }
+    }
+
+    /// GitHub 的更新说明可能很长（Markdown）：提示框里只放开头一段，全文在发布页上
+    private static func excerpt(_ notes: String?) -> String {
+        guard let notes else { return "" }
+        return (notes.count > 600 ? String(notes.prefix(600)) + "…" : notes) + "\n\n"
+    }
+
+    /// 在后台下载、核对新版本。`installImmediately`：用户点了"下载并更新"，好了就换上、重新打开；
+    /// 否则（自动下载的）好了再问什么时候更新
+    private func downloadUpdate(_ update: UpdateInfo, installImmediately: Bool) {
+        guard downloadingUpdateVersion == nil else { return }
+        downloadingUpdateVersion = update.version
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
+        let current = currentVersion
+        let team = UpdateInstaller.teamIdentifier()
+        Task {
+            let started = Date()
+            do {
+                let prepared = try await UpdateInstaller.prepare(
+                    update, bundleIdentifier: bundleIdentifier, currentVersion: current, teamIdentifier: team,
+                    workDirectory: Self.updateWorkDirectory)
+                // 先改状态再弹框：提示框开着的时候菜单里不该还写着"正在下载"
+                downloadingUpdateVersion = nil
+                preparedUpdate = prepared
+                log.write(String(
+                    format: "检查更新：%@ 已下载并核对（%.1f 秒，签名%@）", prepared.version,
+                    Date().timeIntervalSince(started), team.map { "团队 \($0)" } ?? "为临时签名"))
+                if installImmediately {
+                    installUpdate(prepared)
+                } else {
+                    announcedUpdateVersion = prepared.version
+                    offerToInstall(prepared, notes: update.notes)
+                }
+            } catch {
+                downloadingUpdateVersion = nil
+                log.write("检查更新：下载 \(update.version) 没成功——\(error.localizedDescription)")
+                guard installImmediately else { return }
+                let alert = NSAlert()
+                alert.messageText = String(localized: "没能自动更新到 \(update.version)")
+                alert.informativeText = error.localizedDescription + "\n\n"
+                    + String(localized: "可以到下载页手动下载，把新的\(MainMenu.appName)拖进「应用程序」替换旧的。")
+                alert.addButton(withTitle: String(localized: "打开下载页"))
+                alert.addButton(withTitle: String(localized: "好"))
+                NSApp.activate()
+                if alert.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(update.url) }
+            }
+        }
+    }
+
+    /// 新版本下载好了：现在更新（换上、重新打开）/ 退出时更新 / 跳过这个版本
+    private func offerToInstall(_ prepared: UpdateInstaller.Prepared, notes: String?) {
+        let alert = NSAlert()
+        alert.messageText = String(localized: "\(MainMenu.appName) \(prepared.version) 已经下载好了")
+        alert.informativeText = Self.excerpt(notes)
+            + String(localized: "现在更新会重新打开\(MainMenu.appName)，壁纸停一两秒；也可以等退出时再换上。设置和壁纸都在 ~/WallPort 里，不受影响。")
+        alert.addButton(withTitle: String(localized: "现在更新"))
+        alert.addButton(withTitle: String(localized: "退出时更新"))
+        alert.addButton(withTitle: String(localized: "跳过这个版本"))
+        NSApp.activate()
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            installUpdate(prepared)
+        case .alertSecondButtonReturn:
+            installsUpdateOnQuit = true
+            log.write("检查更新：\(prepared.version) 等退出时换上")
+        default:
+            AppFolder.settings.set(prepared.version, forKey: Self.skippedUpdateKey)
+            preparedUpdate = nil
+            installsUpdateOnQuit = false
+            try? FileManager.default.removeItem(at: Self.updateWorkDirectory)
+            log.write("检查更新：跳过 \(prepared.version)")
+        }
+    }
+
+    /// 换上新版并重新打开：原子替换磁盘上的 App，起一个小进程等这个进程退出后再打开它，然后退出
+    private func installUpdate(_ prepared: UpdateInstaller.Prepared) {
+        let app = Bundle.main.bundleURL
+        do {
+            try UpdateInstaller.install(prepared, replacing: app)
+        } catch {
+            log.write("更新：没能换上 \(prepared.version)——\(error.localizedDescription)")
+            showAlert(String(localized: "没能换上新版本"), detail: error.localizedDescription)
+            return
+        }
+        preparedUpdate = nil
+        installsUpdateOnQuit = false
+        try? FileManager.default.removeItem(at: Self.updateWorkDirectory)
+        log.write("更新：已换成 \(prepared.version)，重新打开")
+        let relaunch = Process()
+        relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
+        relaunch.arguments = [
+            "-c", "while /bin/kill -0 \"$1\" 2>/dev/null; do /bin/sleep 0.2; done; /usr/bin/open \"$2\"",
+            "sh", String(ProcessInfo.processInfo.processIdentifier), app.path,
+        ]
+        do {
+            try relaunch.run()
+        } catch {
+            log.write("更新：没能安排重新打开（\(error.localizedDescription)）")
+            showAlert(
+                String(localized: "已经换成 \(prepared.version)"),
+                detail: String(localized: "请退出\(MainMenu.appName)再打开，就是新版本了。"))
+            return
+        }
+        NSApp.terminate(nil)
+    }
+
+    /// 选了"退出时更新"：退出时换上（只是原子交换，几十毫秒），不重新打开
+    private func installPreparedUpdateOnQuit() {
+        guard installsUpdateOnQuit, let prepared = preparedUpdate else { return }
+        do {
+            try UpdateInstaller.install(prepared, replacing: Bundle.main.bundleURL)
+            log.write("更新：退出时换成了 \(prepared.version)")
+            try? FileManager.default.removeItem(at: Self.updateWorkDirectory)
+        } catch {
+            log.write("更新：退出时没能换上 \(prepared.version)——\(error.localizedDescription)")
         }
     }
 

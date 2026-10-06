@@ -41,9 +41,9 @@ code { font: 13px ui-monospace, Menlo, monospace; }
 登录后，用你的账号从 Steam 下载你已拥有的 Wallpaper Engine 里的自带素材（约 85 MB，Wallpaper Engine 更新时重新下载）；
 浏览创意工坊时读取 <code>steamcommunity.com</code> 的公开浏览页和 Steam 的图片、内容服务器。这些请求直接发给 Steam，
 壁坞的开发者看不到。Valve 如何处理这些数据，请看 <a href="https://store.steampowered.com/privacy_agreement/">Steam 隐私政策</a>。</li>
-<li><b>检查更新</b>：壁坞启动后和之后每天一次，向 GitHub（<code>api.github.com</code>）读取本项目最新发布的版本信息；下载新版本也在 GitHub 上。
+<li><b>检查更新</b>：壁坞启动后和之后每天一次，向 GitHub（<code>api.github.com</code>）读取本项目最新发布的版本信息；有新版本时（"自动下载更新"打开时自动，否则在你点"下载并更新"后）从 GitHub（<code>github.com</code> 及其存放发布文件的服务器）下载安装包和它的校验文件，核对后替换壁坞。
 这个请求只包含普通网络请求都有的信息（你的 IP 地址、壁坞的版本号），不包含任何账号或设备标识，由 GitHub 处理，发布者看不到，
-见 <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub 隐私声明</a>。可以在菜单栏图标里关掉"自动检查更新"。</li>
+见 <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub 隐私声明</a>。可以在菜单栏图标里关掉"自动检查更新"和"自动下载更新"。</li>
 <li><b>网页壁纸</b>：网页类壁纸是壁纸作者写的网页，可能会自己联网（例如取天气、字体）。可以在菜单栏图标里关掉"网页壁纸允许联网"。</li>
 <li>你点"在 Steam 上查看""忘记了账号或密码？"等链接时，会在浏览器里打开对应的网页。</li>
 </ul>
@@ -99,7 +99,7 @@ There is no analytics, no advertising and no automatic crash reporting. Your set
 after you sign in, WallPort uses your account to download the built-in assets of the copy of Wallpaper Engine you own (about 85 MB, again when Wallpaper Engine updates);
 browsing the Workshop reads public pages on <code>steamcommunity.com</code> and Steam's image and content servers. These requests go directly to Steam; WallPort's developer cannot see them.
 See the <a href="https://store.steampowered.com/privacy_agreement/">Steam Privacy Policy</a> for how Valve handles this data.</li>
-<li><b>Update check</b>: at launch and once a day, WallPort reads information about this project's latest release from GitHub (<code>api.github.com</code>); new versions are downloaded from GitHub too. The request carries only what every web request carries (your IP address, WallPort's version), no account or device identifier, and is handled by GitHub — the publisher cannot see it; see the <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub Privacy Statement</a>. You can turn off "Check for Updates Automatically" in the menu bar menu.</li>
+<li><b>Update check</b>: at launch and once a day, WallPort reads information about this project's latest release from GitHub (<code>api.github.com</code>); when there is a new version, WallPort downloads its disk image and checksum file from GitHub (<code>github.com</code> and the servers that host release files) — automatically if "Download Updates Automatically" is on, otherwise after you click "Download and Update" — verifies them and replaces itself. The request carries only what every web request carries (your IP address, WallPort's version), no account or device identifier, and is handled by GitHub — the publisher cannot see it; see the <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub Privacy Statement</a>. You can turn off "Check for Updates Automatically" and "Download Updates Automatically" in the menu bar menu.</li>
 <li><b>Web wallpapers</b>: web wallpapers are web pages written by their authors and may access the internet themselves (weather, fonts). You can turn off "Allow Web Wallpapers to Use the Network" in the menu bar menu.</li>
 <li>Links such as "View on Steam" open in your browser.</li>
 </ul>

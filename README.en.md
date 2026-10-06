@@ -98,7 +98,7 @@ Lives in the menu bar; displays without a wallpaper keep your own desktop pictur
 > After making sure you downloaded it from this repository's Releases, open System Settings → Privacy & Security, find WallPort near the bottom and click "Open Anyway".
 > To verify the download: `shasum -a 256 -c WallPort-<version>.dmg.sha256` (the checksum file is in the same release).
 
-**Updates**: WallPort checks for a new version once a day and lets you know (you can turn off "Check for Updates Automatically" in the menu bar menu). Download the new .dmg and drag the new WallPort into Applications to replace the old one; your settings and wallpapers are kept.
+**Updates**: WallPort checks for a new version once a day, downloads and verifies it in the background (checksum, bundle ID, version and code signature), then asks whether to **Update Now** (relaunches; wallpapers pause for a second or two) or **Update When Quitting**. You can turn off "Check for Updates Automatically" and "Download Updates Automatically" in the menu bar menu. If WallPort was opened straight from the disk image, or can't write to Applications, it asks you to download the new .dmg and replace it by hand. Your settings and wallpapers are kept.
 
 <a id="faq"></a>
 ## ❓ FAQ
@@ -164,7 +164,7 @@ Open an [issue](../../issues). In the Library, choose Help → Export Diagnostic
 WallPort **collects no personal information and sends nothing to its developer** — no analytics, no ads, no automatic reports.
 
 - Settings, wallpapers, the (encrypted) sign-in credential, caches and logs stay on your Mac in `~/WallPort`;
-- it connects only to **Steam** (sign-in, subscriptions, downloading wallpapers and assets, browsing the Workshop), **GitHub** (a daily update check you can turn off), and whatever sites web wallpapers load (you can block that in the menu);
+- it connects only to **Steam** (sign-in, subscriptions, downloading wallpapers and assets, browsing the Workshop), **GitHub** (a daily update check and update downloads, both of which you can turn off), and whatever sites web wallpapers load (you can block that in the menu);
 - system audio is read only while a music-reactive wallpaper plays, as a spectrum — nothing is recorded or saved; to pause when the desktop is covered, WallPort reads the positions of on-screen windows (never their contents or titles).
 
 The full [Privacy Policy](App/Legal/Privacy.html) and [Terms of Use](App/Legal/Terms.html) are available from the app's Help menu and welcome window.

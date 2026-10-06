@@ -9,11 +9,17 @@ public struct UpdateInfo: Equatable, Sendable {
     /// 这一版的发布页（下载、更新说明都在那里）
     public var url: URL
     public var notes: String?
+    /// 安装包（发布附件里的 .dmg）和它的 SHA-256 校验文件（`<安装包>.sha256`，`scripts/release.sh` 生成）。
+    /// 两个都有、而且都在这个仓库的 `releases/download` 下时才自动下载；否则只能打开发布页
+    public var package: URL?
+    public var checksum: URL?
 
-    public init(version: String, url: URL, notes: String? = nil) {
+    public init(version: String, url: URL, notes: String? = nil, package: URL? = nil, checksum: URL? = nil) {
         self.version = version
         self.url = url
         self.notes = notes
+        self.package = package
+        self.checksum = checksum
     }
 }
 
@@ -45,14 +51,20 @@ public enum UpdateCheck {
         return URL(string: "https://api.github.com/repos/\(parts[0])/\(parts[1])/releases/latest")
     }
 
-    /// 解析 GitHub 的发布信息（只用到标签、发布页、说明）；发布页也必须是 https
-    public static func parseGitHubRelease(_ data: Data) throws -> UpdateInfo {
+    /// 解析 GitHub 的发布信息（标签、发布页、说明、安装包附件）；发布页也必须是 https。
+    /// 给了仓库时，安装包和校验文件只认这个仓库自己的发布附件（`https://github.com/<仓库>/releases/download/…`）
+    public static func parseGitHubRelease(_ data: Data, repository: String? = nil) throws -> UpdateInfo {
+        struct Asset: Decodable {
+            let name: String
+            let browser_download_url: URL
+        }
         struct Release: Decodable {
             let tag_name: String
             let html_url: URL
             let body: String?
             let draft: Bool?
             let prerelease: Bool?
+            let assets: [Asset]?
         }
         guard let release = try? JSONDecoder().decode(Release.self, from: data), release.draft != true,
               release.prerelease != true
@@ -62,7 +74,21 @@ public enum UpdateCheck {
         if version.first == "v" || version.first == "V" { version.removeFirst() }
         guard !version.isEmpty else { throw Failure.unreadable }
         let notes = release.body?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return UpdateInfo(version: version, url: release.html_url, notes: notes?.isEmpty == false ? notes : nil)
+        // 安装包：优先 WallPort-<版本>.dmg，没有就取第一个 .dmg；校验文件是同名加 .sha256
+        let assets = (release.assets ?? []).filter { isReleaseAsset($0.browser_download_url, repository: repository) }
+        let package = assets.first { $0.name == "WallPort-\(version).dmg" }
+            ?? assets.first { $0.name.lowercased().hasSuffix(".dmg") }
+        let checksum = package.flatMap { package in assets.first { $0.name == package.name + ".sha256" } }
+        return UpdateInfo(
+            version: version, url: release.html_url, notes: notes?.isEmpty == false ? notes : nil,
+            package: checksum == nil ? nil : package?.browser_download_url, checksum: checksum?.browser_download_url)
+    }
+
+    /// 发布附件的下载地址：https、github.com、这个仓库的 releases/download 下面
+    static func isReleaseAsset(_ url: URL, repository: String?) -> Bool {
+        guard url.scheme?.lowercased() == "https", url.host?.lowercased() == "github.com" else { return false }
+        guard let repository else { return url.path.contains("/releases/download/") }
+        return url.path.lowercased().hasPrefix("/\(repository.lowercased())/releases/download/")
     }
 
     /// 版本号按数字一段一段比："1.10.0" 比 "1.9.2" 新，"1.0" 和 "1.0.0" 一样；
@@ -101,6 +127,6 @@ public enum UpdateCheck {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 404 { throw Failure.noRelease }
         guard status == 200 else { throw Failure.badResponse(status) }
-        return try parseGitHubRelease(data)
+        return try parseGitHubRelease(data, repository: repository)
     }
 }

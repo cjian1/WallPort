@@ -60,6 +60,11 @@ import WallpaperLibrary
 //   WallpaperTool acceptance <目录> <WE 自带素材目录> <输出目录> [宽 高]
 //     M6 验收：给每个场景一个可复现的"正常 / 不正常"判定，汇总通过率（见 docs/M6-验收清单.md）。
 //
+//   WallpaperTool update-check <仓库> <假装的当前版本> <Bundle ID> [要替换的 .app]
+//     自动更新的全流程演练（不启动 App）：读最新的正式发布、下载、核对、拷出新 App；给了 .app 就把它替换成新版
+//     （拿一份副本试）。发布后用它确认这一版能被自动更新装上，例如
+//     update-check cjian1/WallPort 1.0.0 io.github.cjian1.wallport /tmp/WallPort.app
+//
 //   WallpaperTool web-capture <项目文件夹> <输出.png> [宽 高]
 //     网页壁纸按给定屏幕尺寸（点，默认 1512×982）打开：报告页面有没有超出视口，并存一张截图。
 //
@@ -381,6 +386,10 @@ case ("acceptance", 4...6):
     exit(acceptance(
         in: arguments[1], assets: URL(fileURLWithPath: arguments[2]), output: arguments[3],
         width: size.0, height: size.1))
+case ("update-check", 4...5):
+    exit(await updateDryRun(
+        repository: arguments[1], currentVersion: arguments[2], bundleIdentifier: arguments[3],
+        target: arguments.count > 4 ? URL(fileURLWithPath: arguments[4]) : nil))
 case ("web-capture", 3), ("web-capture", 5):
     let size = arguments.count == 5
         ? CGSize(width: Double(arguments[3]) ?? 1512, height: Double(arguments[4]) ?? 982) : CGSize(width: 1512, height: 982)
@@ -469,6 +478,7 @@ default:
           WallpaperTool render-scenes <目录> <WE 自带素材目录> <输出目录>
           WallpaperTool regress <目录> <WE 自带素材目录> <基准目录>
           WallpaperTool acceptance <目录> <WE 自带素材目录> <输出目录> [宽 高]
+          WallpaperTool update-check <仓库> <假装的当前版本> <Bundle ID> [要替换的 .app]
           WallpaperTool render-folder <场景文件夹> <WE 自带素材目录> <输出.png> [秒数...]
           WallpaperTool bench-scenes <目录> <WE 自带素材目录> [帧数]
           WallpaperTool motion-scenes <目录> <WE 自带素材目录>
