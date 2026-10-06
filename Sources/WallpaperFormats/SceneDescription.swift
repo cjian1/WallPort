@@ -37,6 +37,8 @@ public struct SceneDescription: Sendable {
         public let isVisible: Bool
         public let alpha: Float
         public let color: SIMD3<Float>
+        /// 图层亮度（`brightness`）：颜色整体乘它，默认 1
+        public let brightness: Float
         /// Photoshop 式的图层混合模式，0 为普通
         public let colorBlendMode: Int
         public let effects: [Effect]
@@ -61,6 +63,9 @@ public struct SceneDescription: Sendable {
         /// 挂在父木偶的哪个挂点上（`"attachment": "鞋"`，名字对应父模型 MDAT 段里的挂点）：
         /// 位置以挂点为原点，跟着那根骨骼动；nil 表示直接相对父图层
         public var attachment: String? = nil
+        /// 图层的视差深度（`general.cameraparallax` 打开时用）：镜头随鼠标挪多少，这一层跟着挪
+        /// depth 倍。(0, 0) 是不动，(1, 1) 跟满。WE 里默认 (1, 1)
+        public var parallaxDepth: SIMD2<Float> = SIMD2(1, 1)
     }
 
     /// 2D 摄像机的动画（`~/wp` 里只有 Lucy 用了：开场从 3 倍拉远到 1 倍，同时平移）。
@@ -267,6 +272,40 @@ public struct SceneDescription: Sendable {
     public let objects: [Object]
     /// 场景泛光（general.bloom）；nil 表示没开，或者是 HDR 场景（见 `Bloom`）
     public let bloom: Bloom?
+    /// 场景级的相机效果（general 里的 zoom / 视差 / 镜头抖动）。和"摄像机对象"（`Object.camera`）不同：
+    /// 这一套作用于整个场景，是 WE 编辑器"场景设置 → 相机"那一页
+    public let cameraEffects: CameraEffects
+    /// 场景级的重力（general.gravitydirection × gravitystrength）：粒子默认受它影响
+    public let gravity: SIMD3<Float>
+    /// 场景级的风（general.windenabled 时的 winddirection × windstrength）
+    public let wind: SIMD3<Float>
+
+    /// 场景级的相机效果。字段名对应 scene.json 里 `general` 层的那几个键
+    /// （2026-10-06 在本机 329 个场景里统计过：camerafade 328、parallax 16、shake 3、zoom≠1 5）。
+    public struct CameraEffects: Sendable, Equatable {
+        /// `general.zoom`：整个场景的放大倍数，1 是正常取景（绕画布中心缩放）
+        public var zoom: Float = 1
+        /// `general.cameraparallax`：镜头随鼠标的视差是否打开
+        public var parallaxEnabled: Bool = false
+        public var parallaxAmount: Float = 0
+        /// 平滑时间（秒）：鼠标动完镜头慢慢跟过去
+        public var parallaxDelay: Float = 0
+        public var parallaxMouseInfluence: Float = 0
+        /// `general.camerashake`：镜头是否随时间抖动
+        public var shakeEnabled: Bool = false
+        public var shakeAmplitude: Float = 0
+        public var shakeRoughness: Float = 0
+        public var shakeSpeed: Float = 0
+        /// `general.camerafade`：WE 加载时把画面淡入（本渲染器不实现，只记下来给验收用）
+        public var fadeEnabled: Bool = false
+
+        public init() {}
+
+        /// 这套效果是不是"什么都不做"
+        public var isIdentity: Bool {
+            abs(zoom - 1) < 1e-4 && !parallaxEnabled && !shakeEnabled
+        }
+    }
 
     /// WE 的场景泛光：整帧里亮的部分提出来、模糊、加回去（WE 自带素材 `shaders/downsample_quarter_bloom` 等）。
     /// 只认非 HDR 场景：HDR 场景（`hdr: true`）的泛光是另一套（阈值 1，亮度超过 1 的部分才泛光，多级迭代），
@@ -331,6 +370,27 @@ public struct SceneDescription: Sendable {
         } else {
             bloom = nil
         }
+        var effects = CameraEffects()
+        // zoom 只认正的有限值：0 或负数会让整个投影退化
+        if let value = SceneValue.float(general["zoom"]), value > 1e-3 { effects.zoom = value }
+        effects.parallaxEnabled = SceneValue.bool(general["cameraparallax"]) ?? false
+        effects.parallaxAmount = SceneValue.float(general["cameraparallaxamount"]) ?? 0
+        effects.parallaxDelay = SceneValue.float(general["cameraparallaxdelay"]) ?? 0
+        effects.parallaxMouseInfluence = SceneValue.float(general["cameraparallaxmouseinfluence"]) ?? 0
+        effects.shakeEnabled = SceneValue.bool(general["camerashake"]) ?? false
+        effects.shakeAmplitude = SceneValue.float(general["camerashakeamplitude"]) ?? 0
+        effects.shakeRoughness = SceneValue.float(general["camerashakeroughness"]) ?? 0
+        effects.shakeSpeed = SceneValue.float(general["camerashakespeed"]) ?? 0
+        effects.fadeEnabled = SceneValue.bool(general["camerafade"]) ?? false
+        cameraEffects = effects
+        // 重力 / 风：方向和强度分开写，乘起来就是加速度。都没写时是 0（不受影响）
+        let gravityStrength = SceneValue.float(general["gravitystrength"]) ?? 0
+        gravity = gravityStrength == 0
+            ? .zero : (SceneValue.vector3(general["gravitydirection"]) ?? SIMD3(0, -1, 0)) * gravityStrength
+        let windEnabled = SceneValue.bool(general["windenabled"]) ?? false
+        let windStrength = SceneValue.float(general["windstrength"]) ?? 0
+        wind = windEnabled && windStrength != 0
+            ? (SceneValue.vector3(general["winddirection"]) ?? .zero) * windStrength : .zero
         let parsedObjects = (root["objects"] as? [[String: Any]] ?? []).map(Self.object)
         objects = parsedObjects
         contentExtent = Self.contentExtent(of: parsedObjects)
@@ -462,6 +522,7 @@ public struct SceneDescription: Sendable {
             isVisible: SceneValue.bool(raw["visible"]) ?? true,
             alpha: SceneValue.float(raw["alpha"]) ?? 1,
             color: SceneValue.vector3(raw["color"]) ?? SIMD3(1, 1, 1),
+            brightness: SceneValue.float(raw["brightness"]) ?? 1,
             colorBlendMode: SceneValue.int(raw["colorBlendMode"]) ?? 0,
             effects: effects,
             scriptedFields: scripted.sorted(),
@@ -472,7 +533,8 @@ public struct SceneDescription: Sendable {
             sound: sound,
             camera: Self.camera(raw, kind: kind),
             alignment: SceneValue.string(raw["alignment"])?.lowercased() ?? "center",
-            attachment: SceneValue.string(raw["attachment"]).flatMap { $0.isEmpty ? nil : $0 })
+            attachment: SceneValue.string(raw["attachment"]).flatMap { $0.isEmpty ? nil : $0 },
+            parallaxDepth: SceneValue.vector2(raw["parallaxDepth"]) ?? SIMD2(1, 1))
     }
 
     /// 2D 摄像机：只有 `camera` 类的对象有；透视场景的摄像机靠 `fov`/`perspective` 区分，这里不处理

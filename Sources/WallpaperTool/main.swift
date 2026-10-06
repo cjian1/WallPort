@@ -57,6 +57,9 @@ import WallpaperLibrary
 //   WallpaperTool framing-check <目录> <WE 自带素材目录> [宽 高] [场景编号…]
 //     取景自检：按屏幕尺寸渲染的和按画布比例渲染后取中间的比，找屏幕比例不同时画面不对的场景。
 //
+//   WallpaperTool acceptance <目录> <WE 自带素材目录> <输出目录> [宽 高]
+//     M6 验收：给每个场景一个可复现的"正常 / 不正常"判定，汇总通过率（见 docs/M6-验收清单.md）。
+//
 //   WallpaperTool web-capture <项目文件夹> <输出.png> [宽 高]
 //     网页壁纸按给定屏幕尺寸（点，默认 1512×982）打开：报告页面有没有超出视口，并存一张截图。
 //
@@ -370,6 +373,14 @@ case ("framing-check", 3...):
     }
     exit(framingCheck(
         in: arguments[1], assets: URL(fileURLWithPath: arguments[2]), width: size.0, height: size.1, only: Set(rest)))
+case ("acceptance", 4...6):
+    var size = (1512, 982)
+    if arguments.count >= 6, let w = Int(arguments[4]), let h = Int(arguments[5]), w < 100_000, h < 100_000 {
+        size = (w, h)
+    }
+    exit(acceptance(
+        in: arguments[1], assets: URL(fileURLWithPath: arguments[2]), output: arguments[3],
+        width: size.0, height: size.1))
 case ("web-capture", 3), ("web-capture", 5):
     let size = arguments.count == 5
         ? CGSize(width: Double(arguments[3]) ?? 1512, height: Double(arguments[4]) ?? 982) : CGSize(width: 1512, height: 982)
@@ -457,6 +468,7 @@ default:
           WallpaperTool scan <目录> [WE 自带素材目录]
           WallpaperTool render-scenes <目录> <WE 自带素材目录> <输出目录>
           WallpaperTool regress <目录> <WE 自带素材目录> <基准目录>
+          WallpaperTool acceptance <目录> <WE 自带素材目录> <输出目录> [宽 高]
           WallpaperTool render-folder <场景文件夹> <WE 自带素材目录> <输出.png> [秒数...]
           WallpaperTool bench-scenes <目录> <WE 自带素材目录> [帧数]
           WallpaperTool motion-scenes <目录> <WE 自带素材目录>

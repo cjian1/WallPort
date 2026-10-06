@@ -126,7 +126,7 @@ WallPort itself does not include or distribute these assets (they are Wallpaper 
 <summary><b>Which wallpapers work?</b></summary>
 <br>
 
-Scene, video and web wallpapers. "Application" wallpapers are Windows programs and cannot run on macOS. A few scene effects (such as camera parallax) are not implemented yet, so those parts look different from the original.
+Scene, video and web wallpapers. "Application" wallpapers are Windows programs and cannot run on macOS. Of the 329 scenes on the development machine, 313 (95%) are judged normal; the rest use a few effects that are not implemented yet (layers with a 3D camera, HDR bloom, ...), so those parts look different from the original. See [docs/M6-验收清单.md](docs/M6-验收清单.md) for the criteria and what is missing.
 </details>
 
 <details>

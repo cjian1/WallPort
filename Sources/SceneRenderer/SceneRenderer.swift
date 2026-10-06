@@ -79,6 +79,18 @@ public final class SceneRenderer: @unchecked Sendable {
     public let usesAudio: Bool
     /// 画面跟着鼠标动（特效或材质读鼠标位置、粒子跟着鼠标、脚本处理鼠标事件）：鼠标一动就要按上限的帧率画
     public let followsPointer: Bool
+    /// 位置驱动的"跟鼠标"（特效 / 材质读 `g_PointerPosition`、粒子控制点跟鼠标、场景级视差），
+    /// **不含**只处理点击 / 拖动的脚本——那些要真的送事件才动。验收判"跟不跟鼠标"用它
+    public let followsPointerPosition: Bool
+    /// 有没有**确定**会随时间变的内容：活着的粒子、木偶骨骼动画、精灵图、材质里读了 `g_Time`、
+    /// 摄像机对象的动画、镜头抖动。
+    ///
+    /// 不含"挂了个特效链"和"有脚本"这两类：语料里不少特效本身就是静态的（水流用"无流动"的流向图）、
+    /// 不少脚本只在交互或放音乐时才动，拿它们判"该动却没动"会冤枉一片。验收判"该动却没动"用它
+    public var animatesOverTime: Bool {
+        liveParticleCount > 0 || hasPuppetAnimation || hasMaterialAnimation
+            || camera != nil || cameraEffects.shakeEnabled || draws.contains { $0.sprite != nil }
+    }
     /// 2D 摄像机有动画（Lucy 的开场）
     private let camera: SceneDescription.Camera?
     /// 粒子系统的个数（含子系统）
@@ -148,6 +160,17 @@ public final class SceneRenderer: @unchecked Sendable {
     private let fallbackTexture: any MTLTexture
     /// 延后到绘制时才算的那些特效链借还主缓冲用的池子
     private let bufferPool: EffectBufferPool
+    /// 场景级的相机效果（general 的 zoom / 视差 / 抖动）
+    private let cameraEffects: SceneDescription.CameraEffects
+    /// 视差平滑用的上一次镜头偏移和它的时刻（nil 表示这一帧是第一帧，直接跟到鼠标位置）
+    private var smoothedParallax: SIMD2<Float>?
+    private var smoothedParallaxTime: Float?
+
+    /// 视差偏移的基准比例：鼠标推到边缘、amount 与 mouseinfluence 都为 1 时，镜头挪画布尺寸的这个比例。
+    /// WE 没有公开这个单位，这里是**推断值**（见 docs/M6-验收清单.md 与 REFERENCES.md），偏保守
+    static let inferredParallaxScale: Float = 0.05
+    /// 镜头抖动幅度的基准比例（同样无公开单位，推断值）：amplitude 为 1 时的最大偏移
+    static let inferredShakeScale: Float = 0.01
 
     public static let pixelFormat = MTLPixelFormat.bgra8Unorm
 
@@ -355,13 +378,18 @@ public final class SceneRenderer: @unchecked Sendable {
         needsPointerEvents = result.draws.contains { $0.scripted?.handlesPointer == true }
         usesAudio = (result.chains + result.draws.compactMap(\.chain)).contains(where: \.readsAudio)
             || (result.draws.compactMap(\.scripted) + controllerScripts).contains(where: \.usesAudio)
-        followsPointer = needsPointerEvents
+        // 「画面会因为鼠标挪动而变」的可断言来源：场景级视差，以及控制点跟鼠标的粒子。
+        // 特效 / 材质**声明**了 g_PointerPosition 的很多（WE 的公共头文件里就有这个名字），但大部分组合下根本不用它，
+        // 拿"声明了"去判会冤枉一大片——所以这里只认这两种确实会动的
+        followsPointerPosition = scene.cameraEffects.parallaxEnabled
+            || result.draws.contains { $0.particles?.followsPointer == true }
+        // 显示链路用的信号照旧要宽：特效 / 材质只要**读**鼠标位置，鼠标一动就得按上限的帧率重画
+        followsPointer = needsPointerEvents || followsPointerPosition
             || (result.chains + result.draws.compactMap(\.chain)).contains(where: \.readsPointer)
             || result.draws.contains { draw in
                 guard let material = draw.material else { return false }
                 return material.vertexUniforms.has("g_PointerPosition") || material.fragmentUniforms.has("g_PointerPosition")
             }
-            || result.draws.contains { $0.particles?.followsPointer == true }
         camera = scene.objects.compactMap(\.camera).first { $0.isAnimated }
         var indexByObject: [Int: Int] = [:]
         for (position, draw) in result.draws.enumerated() where indexByObject[draw.objectID] == nil {
@@ -405,7 +433,15 @@ public final class SceneRenderer: @unchecked Sendable {
         drawnLayerCount = result.draws.count
         renderedEffectCount = result.renderedEffects
         effectSummaries = result.effectSummaries
-        unsupported = result.unsupported
+        cameraEffects = scene.cameraEffects
+        // 渲染器自己只知道它**主动跳过**的东西（灯光、vortex_v2…）。像 general.zoom / 视差 / 重力这种
+        // "解析层面就没读"的整场景特性原来完全不出现在报告里，体检分数因此虚高。这里按 scene.json 再核对一遍，
+        // 把作者写了、但我们没实现的项补进 `unsupported`
+        var reported = result.unsupported
+        for (name, count) in SceneFeatureCoverage.unhandled(in: sceneData, scene: scene) {
+            reported[name, default: 0] += count
+        }
+        unsupported = reported
         var problems = result.problems
         if let settings = scene.bloom {
             do {
@@ -512,7 +548,10 @@ public final class SceneRenderer: @unchecked Sendable {
         let projection = Self.projection(
             kind: projectionKind, canvas: canvasSize, center: canvasCenter, fill: fillBox, camera: sceneCamera,
             fov: fov, near: nearz, far: farz,
-            target: SIMD2(Float(target.width), Float(target.height)), focus: focus) * cameraMatrix(at: time)
+            target: SIMD2(Float(target.width), Float(target.height)), focus: focus)
+            * cameraMatrix(at: time) * sceneCameraMatrix(at: time)
+        // 场景级视差：每层按自己的 parallaxDepth 挪（鼠标一停就停在当前偏移上）
+        let parallaxCamera = cameraParallaxOffset(at: time, pointer: pointer)
         // 鼠标在画布坐标里的位置（粒子的控制点可以跟随鼠标）
         let pointerClip = projection.inverse * SIMD4(pointer.x * 2 - 1, 1 - pointer.y * 2, 0, 1)
         let canvasPointer = SIMD2(pointerClip.x, pointerClip.y)
@@ -555,8 +594,10 @@ public final class SceneRenderer: @unchecked Sendable {
             guard let position = drawIndexByObject[objectID] else { continue }
             let draw = draws[position]
             guard state.isVisible(objectID) else { continue }
-            // 脚本改了位置/缩放时，把它当作画布坐标里的额外变换乘在投影前面
-            let viewProjection = projection * state.delta(objectID)
+            // 脚本改了位置/缩放时，把它当作画布坐标里的额外变换乘在投影前面；
+            // 视差偏移按这一层自己的 parallaxDepth 作用（depth 为 0 的图层不动）
+            let parallax = parallaxCamera * state.layerParallaxDepth(objectID)
+            let viewProjection = projection * Self.translation(parallax) * state.delta(objectID)
             // 从池子借了主缓冲的链子：画完这一层就还回去（`defer` 在这一轮循环结束时执行）
             var pooledChain: EffectChain?
             defer { pooledChain?.releaseBuffers(to: bufferPool) }
@@ -977,6 +1018,82 @@ public final class SceneRenderer: @unchecked Sendable {
         var toCamera = matrix_identity_float4x4
         toCamera.columns.3 = SIMD4(-center.x - state.origin.x, -center.y - state.origin.y, 0, 1)
         return toCenter * simd_float4x4(diagonal: SIMD4(state.zoom, state.zoom, 1, 1)) * toCamera
+    }
+
+    /// 场景级相机（`general.zoom` 和 `camerashake`）的变换：缩放绕画布中心，抖动按时间算一个偏移。
+    /// 视差是逐图层的（每层 parallaxDepth 不同），不在这里，见 `cameraParallaxOffset`
+    private func sceneCameraMatrix(at time: Float) -> simd_float4x4 {
+        var matrix = matrix_identity_float4x4
+        let zoom = cameraEffects.zoom
+        if abs(zoom - 1) > 1e-4 {
+            let center = canvasSize / 2
+            matrix = simd_float4x4(diagonal: SIMD4(zoom, zoom, 1, 1))
+            matrix.columns.3 = SIMD4(center.x * (1 - zoom), center.y * (1 - zoom), 0, 1)
+        }
+        guard cameraEffects.shakeEnabled else { return matrix }
+        let offset = shakeOffset(at: time)
+        var shake = matrix_identity_float4x4
+        shake.columns.3 = SIMD4(offset.x, offset.y, 0, 1)
+        return shake * matrix
+    }
+
+    /// 这一时刻的镜头抖动偏移（画布单位）。幅度按画布短边和 `camerashakeamplitude` 定，粗糙度放大偏移，
+    /// 速度是噪声的变化快慢。两个方向用不同相位的平滑噪声（每帧乱跳会像噪点，不像镜头）
+    private func shakeOffset(at time: Float) -> SIMD2<Float> {
+        let effects = cameraEffects
+        let base = min(canvasSize.x, canvasSize.y) * Self.inferredShakeScale
+            * max(effects.shakeAmplitude, 0) * (0.5 + max(effects.shakeRoughness, 0))
+        guard base > 0 else { return .zero }
+        let speed = max(abs(effects.shakeSpeed), 0.05) * 2
+        return SIMD2(
+            Self.smoothNoise(time * speed, seed: 1.7),
+            Self.smoothNoise(time * speed, seed: 9.3)) * base
+    }
+
+    /// -1…1 的平滑伪随机：整数点上是随机值，中间按三次平滑插值
+    static func smoothNoise(_ t: Float, seed: Float) -> Float {
+        let base = t.rounded(.down)
+        let f = t - base
+        let u = f * f * (3 - 2 * f)
+        return hashNoise(base, seed) * (1 - u) + hashNoise(base + 1, seed) * u
+    }
+
+    static func hashNoise(_ n: Float, _ seed: Float) -> Float {
+        let value = sin(Double(n) * 127.1 + Double(seed) * 311.7) * 43758.5453
+        return Float((value - value.rounded(.down)) * 2 - 1)
+    }
+
+    /// 这一帧的镜头视差偏移（画布单位）：鼠标离屏幕中心越远、amount 与 mouseinfluence 越大，偏移越大；
+    /// delay 越大镜头跟得越慢。返回的是"depth 为 1 的图层"该挪多少，(0,0) 表示不偏移
+    private func cameraParallaxOffset(at time: Float, pointer: SIMD2<Float>) -> SIMD2<Float> {
+        let effects = cameraEffects
+        guard effects.parallaxEnabled else { return .zero }
+        // 鼠标位置 0–1、原点左上角 → 画布方向（右 / 上为 +1）
+        let mouse = SIMD2(pointer.x * 2 - 1, 1 - pointer.y * 2)
+        let target = mouse
+            * (effects.parallaxAmount * effects.parallaxMouseInfluence * Self.inferredParallaxScale)
+            * min(canvasSize.x, canvasSize.y)
+        // 第一帧（离线出图、刚载入）直接跟到鼠标位置；之后按 delay 平滑过去
+        guard let previous = smoothedParallax, let last = smoothedParallaxTime else {
+            smoothedParallax = target
+            smoothedParallaxTime = time
+            return target
+        }
+        let dt = min(max(time - last, 0), 0.25)
+        smoothedParallaxTime = time
+        let delay = max(effects.parallaxDelay, 0)
+        // dt 为 0（离线出图连着画同一时刻的几帧，或者一帧里取了好几次）时没有"经过的时间"可平滑，直接跟到目标，
+        // 否则连画两张会永远停在上一次的偏移上
+        let blend: Float = (delay <= 1e-3 || dt <= 1e-4) ? 1 : 1 - exp(-dt / delay)
+        let next = previous + (target - previous) * blend
+        smoothedParallax = next
+        return next
+    }
+
+    private static func translation(_ offset: SIMD2<Float>) -> simd_float4x4 {
+        var matrix = matrix_identity_float4x4
+        matrix.columns.3 = SIMD4(offset.x, offset.y, 0, 1)
+        return matrix
     }
 
     /// 点在不在这块四边形里（凸四边形，允许旋转）
@@ -2068,7 +2185,8 @@ public final class SceneRenderer: @unchecked Sendable {
             set("g_Texture0Resolution", [stored.x, stored.y, image.x, image.y])
 
             let simulation = ParticleSimulation(
-                definition: definition, override: override, seed: seed, trailLength: renderer.trailLength)
+                definition: definition, override: override, seed: seed, trailLength: renderer.trailLength,
+                sceneForce: scene.gravity + scene.wind)
             for name in simulation.unsupported { unsupported["粒子\(name)（跳过）", default: 0] += 1 }
             particleSystems += 1
             let textureList = slotNames.sorted { $0.key < $1.key }

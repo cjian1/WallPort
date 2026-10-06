@@ -250,6 +250,11 @@ final class ParticleSimulation {
     let controlPointFollowsPointer: [Bool]
     /// ropetrail 画法要记录的历史时长（秒）；0 表示不记录
     let trailLength: Float
+    /// 场景级的外力（WE 的 `general.gravity*` + `wind*`）：每一步加到速度上。
+    /// 语料里粒子的 movement 算子普遍把 gravity 写成 0、靠这个全局重力下落（雪花、落叶、尘埃）
+    let sceneForce: SIMD3<Float>
+    /// 有没有 movement 算子。有的话位置由它积分；没有时外力这边补一次位置积分
+    private let hasMovementOperator: Bool
     /// 历史按模拟步长采样，所以容量 = 时长 / 步长；上限 64 条，够画长拖尾了
     private var trailCapacity: Int {
         trailLength > 0 ? min(64, Int(saturating: (trailLength / Self.trailStep).rounded(.up)) + 2) : 0
@@ -274,11 +279,12 @@ final class ParticleSimulation {
 
     init(
         definition: ParticleDefinition, override: ParticleOverride = ParticleOverride(), seed: UInt64 = 1,
-        trailLength: Float = 0
+        trailLength: Float = 0, sceneForce: SIMD3<Float> = .zero
     ) {
         self.override = override
         self.seed = seed
         self.trailLength = max(0, trailLength)
+        self.sceneForce = sceneForce
         maxCount = definition.maxCount
         startTime = definition.startTime
         random = ParticleRandom(seed: seed)
@@ -476,6 +482,7 @@ final class ParticleSimulation {
         controlPointOffsets = offsets
         controlPointFollowsPointer = follows
         self.unsupported = unsupported
+        hasMovementOperator = operators.contains { if case .movement = $0 { return true } else { return false } }
         accumulators = Array(repeating: 0, count: emitters.count)
         instantaneousDone = Array(repeating: false, count: emitters.count)
     }
@@ -701,6 +708,12 @@ final class ParticleSimulation {
         var alpha = particle.alpha
         var size = particle.size
         var offset = SIMD3<Float>.zero
+        // 场景级重力 / 风（general.gravity* + wind*）：先加到速度上，位置由 movement 算子积分。
+        // 系统里没有 movement 算子时这里补一次积分，否则粒子只被加速却不动
+        if sceneForce != .zero {
+            particle.velocity += sceneForce * speedFactor * dt
+            if !hasMovementOperator { particle.position += particle.velocity * dt }
+        }
         for (index, op) in operators.enumerated() {
             let salt = UInt32(index) &* 16
             switch op {

@@ -30,6 +30,10 @@ protocol SceneGraphScriptAPI: AnyObject {
     /// 图层的对齐方式（`thisLayer.alignment`，"center" / "bottom" / "topleft"…）
     func layerAlignment(_ id: Int) -> String
     func setLayerAlignment(_ id: Int, _ value: String)
+    /// 图层的视差深度（`thisLayer.parallaxDepth`，见 `general.cameraparallax`）：
+    /// (0, 0) 不随镜头动，(1, 1) 跟满
+    func layerParallaxDepth(_ id: Int) -> SIMD2<Float>
+    func setLayerParallaxDepth(_ id: Int, _ value: SIMD2<Float>)
 }
 
 /// 运行时的图层状态：图层自己的属性脚本、以及场景对象接口改的都是这里。绘制时按它算
@@ -75,6 +79,8 @@ final class SceneState {
         /// 对齐点（WE 的 alignment，见 `SceneState.anchor`）：脚本可以改（可视化条把柱子改成底边对齐）
         var anchor = SIMD2<Float>(0, 0)
         var buildAnchor = SIMD2<Float>(0, 0)
+        /// 视差深度（general.cameraparallax 打开时用），脚本可改
+        var parallaxDepth = SIMD2<Float>(1, 1)
         /// 四边形（或以框中心为原点的木偶网格）在图层自身坐标里的宽高，对齐按它挪；nil 的图层（粒子）不挪
         var quadSize: SIMD2<Float>?
         /// 挂在父木偶挂点上（scene.json 的 `attachment`）：挂点在父模型坐标里的当前变换（骨骼当前姿势 × 挂点偏移）。
@@ -112,15 +118,18 @@ final class SceneState {
             buildOrigin = object.origin
             buildScale = object.scale
             buildAlpha = object.alpha
-            buildColor = object.color
+            // 图层亮度：颜色整体乘它（WE 的 brightness，默认 1）
+            let lit = object.color * max(object.brightness, 0)
+            buildColor = lit
             buildVisible = object.isVisible
             size = object.size ?? SIMD2(1, 1)
             anchor = SceneState.anchor(object.alignment)
             buildAnchor = anchor
+            parallaxDepth = object.parallaxDepth
             origin = object.origin
             scale = object.scale
             alpha = object.alpha
-            color = object.color
+            color = lit
             visible = object.isVisible
         }
 
@@ -396,4 +405,8 @@ extension SceneState: SceneGraphScriptAPI {
     }
 
     func setLayerAlignment(_ id: Int, _ value: String) { layers[id]?.anchor = Self.anchor(value) }
+
+    func layerParallaxDepth(_ id: Int) -> SIMD2<Float> { layers[id]?.parallaxDepth ?? SIMD2(1, 1) }
+
+    func setLayerParallaxDepth(_ id: Int, _ value: SIMD2<Float>) { layers[id]?.parallaxDepth = value }
 }

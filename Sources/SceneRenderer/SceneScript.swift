@@ -481,6 +481,13 @@ final class SceneScript {
         let setAlignment: @convention(block) (Int, String) -> Void = { id, value in
             if let graph { graph.setLayerAlignment(id, value) }
         }
+        let parallaxDepth: @convention(block) (Int) -> [Double] = { id in
+            let value = graph?.layerParallaxDepth(id) ?? SIMD2(1, 1)
+            return [Double(value.x), Double(value.y)]
+        }
+        let setParallaxDepth: @convention(block) (Int, Double, Double) -> Void = { id, x, y in
+            if let graph { graph.setLayerParallaxDepth(id, SIMD2(Float(x), Float(y))) }
+        }
         context.setObject(name, forKeyedSubscript: "__layerName" as NSString)
         context.setObject(alpha, forKeyedSubscript: "__layerAlpha" as NSString)
         context.setObject(setAlpha, forKeyedSubscript: "__layerSetAlpha" as NSString)
@@ -500,6 +507,8 @@ final class SceneScript {
         context.setObject(sort, forKeyedSubscript: "__sortLayer" as NSString)
         context.setObject(alignment, forKeyedSubscript: "__layerAlignment" as NSString)
         context.setObject(setAlignment, forKeyedSubscript: "__layerSetAlignment" as NSString)
+        context.setObject(parallaxDepth, forKeyedSubscript: "__layerParallaxDepth" as NSString)
+        context.setObject(setParallaxDepth, forKeyedSubscript: "__layerSetParallaxDepth" as NSString)
     }
 
     /// 脚本注册过音频频谱吗（`engine.registerAudioBuffers`）；注册了就不会再撤销，记住结果免得每帧查 JS
@@ -747,9 +756,9 @@ final class SceneScript {
             // 对齐方式："center" / "bottom" / "topleft"…（可视化条把柱子设成底边对齐，从底边往上长）
             get alignment() { return __layerAlignment(this.__id); }
             set alignment(value) { __layerSetAlignment(this.__id, String(value)); }
-            // 视差深度：2D 场景里我们用不到，给成可读写的占位属性，脚本赋值不会报错
-            get parallaxDepth() { return new Vec2(1, 1); }
-            set parallaxDepth(value) { }
+            // 视差深度（general.cameraparallax 打开时决定这一层跟着镜头挪多少）
+            get parallaxDepth() { const p = __layerParallaxDepth(this.__id); return new Vec2(p[0], p[1]); }
+            set parallaxDepth(value) { __layerSetParallaxDepth(this.__id, value.x, value.y); }
             getChildren() { return __layerChildren(this.__id).map((id) => globalThis.__layerByID(id)); }
             // 特效实例（`effect.instance.alpha`）：结构给上，改动还不生效
             get instance() { return { alpha: 0 }; }

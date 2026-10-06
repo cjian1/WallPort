@@ -124,7 +124,7 @@ func writePNG(_ image: CGImage, to url: URL) throws {
 }
 
 /// 两张图缩到 32×32 后逐像素比较 RGB 的平均绝对差（0–255）
-private func meanDifference(_ first: CGImage, _ second: CGImage, flipFirst: Bool, size: Int = 32) -> Double {
+func meanDifference(_ first: CGImage, _ second: CGImage, flipFirst: Bool, size: Int = 32) -> Double {
     let a = thumbnail(first, flip: flipFirst, size: size)
     let b = thumbnail(second, flip: false, size: size)
     var total = 0
