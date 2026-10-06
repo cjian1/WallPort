@@ -131,6 +131,12 @@ private func render(_ renderer: String, radius: Float = 20, speed: Float = 0, st
 }
 
 @Suite struct RopeParticleTests {
+    /// 坏文件：starttime 写成 1e30（有限但极大）时，预模拟的步数超出 Int 的范围，原来转整数时直接崩；
+    /// 带子的 segments / subdivision 写成离谱的数也一样
+    @Test func absurdStartTimeAndRibbonCountsDoNotCrash() throws {
+        _ = try render(#"{"name": "ropetrail", "segments": 1e20, "subdivision": -1e20}"#, startTime: 1e30)
+    }
+
     /// 同一批粒子：sprite 画成 12 个圆点，rope 把它们连成一整圈带子，亮着的像素多得多
     @Test func ropeRendererConnectsParticlesIntoARibbon() throws {
         let sprites = litPixels(try render(#"{"name": "sprite"}"#))

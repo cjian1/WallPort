@@ -70,10 +70,15 @@ public final class SceneContent: DesktopContent, UserPausable, AudioPlaying, Fra
 
     /// 显示链路现在用的帧率、量过几次（测试用）
     var frameRateInUse: Int? { appliedFrameRate }
+    /// 画面没变、没画的帧数（测试用）
+    private(set) var skippedFrames = 0
     var motionSamples: Int { governor?.history.count ?? 0 }
     /// 全局鼠标监听：桌面窗口收不到点击，用它拿点击和拖动
     private var mouseMonitor: GlobalMouseMonitor?
     private var lastPointerDown: CGPoint?
+    /// 静止场景的悬停重画已经排上了 / 上次画的时刻（见 `scheduleHoverRedraw`）
+    private var hoverRedrawPending = false
+    private var lastHoverRedraw: CFTimeInterval = 0
     /// 重建场景要用的入参
     private let projectFolder: URL
     private let assets: URL?
@@ -247,6 +252,9 @@ public final class SceneContent: DesktopContent, UserPausable, AudioPlaying, Fra
             link.add(to: .main, forMode: .common)
             displayLink = link
             applyFrameRate()
+            if renderer.redrawsOnlyWhenStateChanges {
+                log.write("\(label) 场景：只有脚本 / 文字会改画面，状态变了才重画")
+            }
         }
         if renderer.needsPointerEvents { startMouseMonitor() }
         // 静态场景也可能有声音，同样要跟着播放状态走
@@ -391,6 +399,12 @@ public final class SceneContent: DesktopContent, UserPausable, AudioPlaying, Fra
         updatePointer()
         driveMotionProbe()
         applyFrameRate()
+        // 只有脚本 / 文字会改画面的场景：先跑脚本，图层状态和上次画的一样就不画（不编码、不提交，系统也不用重新合成）
+        if let renderer, renderer.redrawsOnlyWhenStateChanges, sceneView.hasDrawnFrame,
+           !renderer.prepareFrame(at: sceneView.time) {
+            skippedFrames += 1
+            return
+        }
         sceneView.redraw()
     }
 
@@ -445,11 +459,30 @@ public final class SceneContent: DesktopContent, UserPausable, AudioPlaying, Fra
             sceneView.pointerEvents.append(.init(kind: .dragged, position: position))
             sceneView.pointer = position
         case .moved:
-            // 移动只更新指针位置，悬停在渲染时统一处理；静止的场景靠这次重绘来响应
+            // 移动只更新指针位置，悬停在渲染时统一处理；静止的场景靠重绘来响应。鼠标一秒能来上百个移动事件
+            //（在别的 App 窗口上移动也算），每个都整屏重画一次太费电：按帧率上限合并
             sceneView.pointer = position
+            if displayLink?.isPaused ?? true { scheduleHoverRedraw() }
+            return
         }
         // 事件是异步来的，处理完立刻画一帧（静止场景也能及时响应点击）
         if displayLink?.isPaused ?? true { sceneView.redraw() }
+    }
+
+    /// 静止场景的悬停重画：距上次不到一帧（按帧率上限，不限制时按 60）就排到那时候，期间再来的移动合并进去
+    private func scheduleHoverRedraw() {
+        guard !hoverRedrawPending else { return }
+        let interval = 1 / Double(maximumFrameRate > 0 ? maximumFrameRate : 60)
+        let wait = max(0, lastHoverRedraw + interval - CACurrentMediaTime())
+        hoverRedrawPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.hoverRedrawPending = false
+                self.lastHoverRedraw = CACurrentMediaTime()
+                if self.displayLink?.isPaused ?? true { self.sceneView.redraw() }
+            }
+        }
     }
 
     private func playbackDidChange(_ playing: Bool, reason: String) {
@@ -628,6 +661,9 @@ final class SceneView: NSView {
         layer.pixelFormat = SceneRenderer.pixelFormat
         layer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
         layer.backgroundColor = NSColor.black.cgColor
+        // 画面整块覆盖、下面是黑底：按预乘 alpha 叠到黑色上的结果就是原来的 RGB，标成不透明画出来一模一样，
+        // 系统合成时却不用每帧再把整屏和下面混合一遍
+        layer.isOpaque = true
         // 图层混合模式要在着色器里读帧缓冲
         layer.framebufferOnly = false
         // 按 30 帧画，两张轮换就够；默认的三张每张都是整屏大小（3024×1964 约 24 MB）

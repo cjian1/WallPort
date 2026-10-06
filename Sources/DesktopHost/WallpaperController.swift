@@ -46,6 +46,9 @@ public final class WallpaperController: NSObject {
     private let makeContent: ContentFactory
     private var slots: [CGDirectDisplayID: Slot] = [:]
     private var pendingProbeReasons: [String] = []
+    /// 已经排了一次"显示器参数变化"的处理（见 `screenParametersDidChange`）
+    private var screenSyncScheduled = false
+    private static let screenSyncInterval: TimeInterval = 0.25
     private var watchdog: Timer?
     private var snapshotTasks: [CGDirectDisplayID: Task<Void, Never>] = [:]
 
@@ -137,6 +140,7 @@ public final class WallpaperController: NSObject {
         coverageTimer?.invalidate()
         coverageTimer = nil
         NSObject.cancelPreviousPerformRequests(withTarget: self)
+        screenSyncScheduled = false
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         for id in Array(slots.keys) { removeSlot(for: id) }
@@ -338,7 +342,16 @@ public final class WallpaperController: NSObject {
 
     // MARK: - 系统事件
 
+    /// 程序坞、菜单栏自动隐藏的动画里系统每帧发一次"显示器参数变化"（日志里实测 2 秒 240 次，配置都没变），
+    /// 每次都重算显示器、同步写一行日志。合并成每 0.25 秒最多处理一次，动画结束后那一次照样会处理
     @objc private func screenParametersDidChange() {
+        guard !screenSyncScheduled else { return }
+        screenSyncScheduled = true
+        perform(#selector(syncAfterScreenParametersChange), with: nil, afterDelay: Self.screenSyncInterval)
+    }
+
+    @objc private func syncAfterScreenParametersChange() {
+        screenSyncScheduled = false
         syncDisplays(reason: "显示器参数变化")
     }
 
@@ -410,7 +423,9 @@ public final class WallpaperController: NSObject {
     /// 重算每块显示器被窗口挡住了多少，有变化的告诉它的内容
     private func updateCoverage() {
         var covered: Set<CGDirectDisplayID> = []
-        if pausesWhenCovered, isShown, !isAsleep, !slots.isEmpty {
+        // 所有屏幕都不放动态壁纸（露出系统壁纸）时没什么可暂停的，不必每秒去读一遍窗口列表
+        let hasLiveContent = slots.values.contains { !$0.content.showsSystemWallpaper }
+        if pausesWhenCovered, isShown, !isAsleep, hasLiveContent {
             let windows = DesktopCoverage.onScreenWindowFrames()
             for id in slots.keys {
                 guard let region = DesktopCoverage.usableRegion(of: id) else { continue }

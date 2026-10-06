@@ -157,6 +157,16 @@ public actor WorkshopNative {
         }
     }
 
+    /// 空闲时断开已登录的连接（心跳跟着停）。会话不动，下一次操作自己重连。正在连的不打断
+    @discardableResult
+    public func closeIdleConnection() async -> Bool {
+        guard connecting == nil, let current = connection else { return false }
+        connection = nil
+        connectionToken = nil
+        await current.close()
+        return true
+    }
+
     /// 退出登录：关掉已登录的连接
     public func logOut() async {
         connecting?.cancel()

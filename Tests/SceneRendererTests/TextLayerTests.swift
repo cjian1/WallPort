@@ -327,6 +327,33 @@ private func properties(_ text: String) -> Data { Data(text.utf8) }
         #expect(brightPixels(image, x: 20, y: 10, width: 60, height: 30) > 10)
     }
 
+    /// 只有时钟会变的场景：桌面上每帧只查文字，字变了才画。判定要准：挂了特效（每帧都在变）就不算
+    @Test func clockOnlyScenesRedrawOnlyWhenTheTextChanges() throws {
+        try #require(FileManager.default.fileExists(atPath: systemFont.path))
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        // 每问一次脚本计数加一，每问两次文字变一次
+        let source = "let asked = 0; export function update(value) { asked += 1; return String(Math.floor(asked / 2)); }"
+        let renderer = try SceneRenderer(
+            device: device, package: try makePackage(["scene.json": scene(text: "0", script: source)]),
+            assets: systemFont.deletingLastPathComponent())
+        #expect(renderer.needsAnimation)
+        #expect(renderer.redrawsOnlyWhenStateChanges)
+        // 建渲染器时已经问过一次、画出了 "0"
+        _ = try renderer.renderImage(width: 100, height: 50, time: 0)
+        #expect(!renderer.prepareFrame(at: 0.5), "不到一秒不问脚本")
+        #expect(renderer.prepareFrame(at: 1), "第二次问：\"1\"，变了")
+        _ = try renderer.renderImage(width: 100, height: 50, time: 1)
+        #expect(!renderer.prepareFrame(at: 2), "第三次问还是 \"1\"，不用重画")
+        #expect(renderer.prepareFrame(at: 3), "第四次问：\"2\"")
+
+        var files = effectFiles
+        files["scene.json"] = scene(text: "0", script: source, effects: #", "effects": [{"file": "effects/green/effect.json"}]"#)
+        let withEffect = try SceneRenderer(
+            device: device, package: try makePackage(files), assets: systemFont.deletingLastPathComponent())
+        #expect(withEffect.needsAnimation)
+        #expect(!withEffect.redrawsOnlyWhenStateChanges, "特效每帧都要算，不能只在状态变时才画")
+    }
+
     /// 文字图层上的特效作用在文字贴图上：白字经过"全部换成绿色"的特效后应该只剩绿色
     @Test func effectsOnTextLayersApplyToTheTextTexture() throws {
         try #require(FileManager.default.fileExists(atPath: systemFont.path))

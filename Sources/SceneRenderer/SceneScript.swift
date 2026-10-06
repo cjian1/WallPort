@@ -88,6 +88,8 @@ final class SceneScript {
     private(set) var problem: String?
     /// 有一次调用超时被终止后就停用，免得每帧都白等一个时限
     private var isDisabled = false
+    /// JS 里的 `__guardedCall`（见 `guardedCall`）：在脚本载入**之前**取出来，脚本改全局变量也换不掉它
+    private var guardedCaller: JSValue?
 
     /// - Parameter now: 取"当前时间"，测试里可以固定住
     init?(source: String, properties: Data?, environment: Environment, now: @escaping () -> Date = { Date() }) {
@@ -137,6 +139,8 @@ final class SceneScript {
         installTimers()
         Self.installSceneGraph(environment.graph, owner: environment.ownerID, in: context)
         context.evaluateScript(Self.prelude)
+        context.evaluateScript(Self.guardedCallSource)
+        guardedCaller = Self.function(named: "__guardedCall", in: context)
         if let graph = environment.graph {
             // 有场景对象接口时，thisLayer / thisObject / thisScene 都换成活的图层对象：
             // `thisLayer.origin = …` 这种写法要真的能移动图层
@@ -179,8 +183,7 @@ final class SceneScript {
         // 2248783434 的人物位置就是这样，`new Vec3(undefined, undefined, z)` 让人物跑到了画布左下角。
         // 这里抛了异常不算脚本坏了（update 可能照样能跑），清掉接着用
         if problem == nil, let apply = Self.function(named: "applyUserProperties", in: context) {
-            _ = timed { apply.call(withArguments: [userProperties]) }
-            context.exception = nil
+            _ = guardedCall(apply, [userProperties])
         }
     }
 
@@ -276,11 +279,7 @@ final class SceneScript {
             } else {
                 timers.remove(at: index)
             }
-            _ = timed { timer.callback.call(withArguments: []) }
-            if let exception = context.exception {
-                problem = "定时器出错：\(exception.toString() ?? "")"
-                context.exception = nil
-            }
+            if let error = guardedCall(timer.callback, []).error { problem = "定时器出错：\(error)" }
             if isDisabled { return }
         }
     }
@@ -341,10 +340,8 @@ final class SceneScript {
         if !hasRunInit {
             hasRunInit = true
             if let initFunction {
-                let result = timed { initFunction.call(withArguments: [initial]) }
-                if context.exception != nil {
-                    context.exception = nil
-                } else if let result, !result.isUndefined, !result.isNull {
+                let (result, error) = guardedCall(initFunction, [initial])
+                if error == nil, let result, !result.isUndefined, !result.isNull {
                     initResult = result
                     argument = result
                 }
@@ -352,16 +349,46 @@ final class SceneScript {
             }
         }
         guard let updateFunction else { return initResult }
-        let result = timed { updateFunction.call(withArguments: [argument]) }
-        if let exception = context.exception {
+        let (result, error) = guardedCall(updateFunction, [argument])
+        if let error {
             problem = isDisabled
                 ? "脚本单次运行超过 \(Int(Self.timeLimit * 1000)) 毫秒，已停用"
-                : "脚本出错：\(exception.toString() ?? "")"
-            context.exception = nil
+                : "脚本出错：\(error)"
             return nil
         }
         return result
     }
+
+    /// 在 JS 里调用、在 JS 里接住异常（`__guardedCall`）。异常要是一路传回原生，JavaScriptCore 每次都要
+    /// 符号化原生调用栈去报告它（`dladdr`，一次约 0.7 毫秒）：作者写错、每帧都抛异常的属性脚本
+    /// （`visible` 上挂了引用未定义变量的拖拽脚本，本机有好几个场景）光这一项就让每帧多花 0.7 毫秒。
+    /// 接住以后照常每帧调用（和 WE 一样），只是不再付这笔开销。超时终止 JS 接不住，照旧从 `context.exception` 出来
+    private func guardedCall(_ function: JSValue, _ arguments: [Any]) -> (result: JSValue?, error: String?) {
+        guard let guardedCaller else {
+            let result = timed { function.call(withArguments: arguments) }
+            guard let exception = context.exception else { return (result, nil) }
+            context.exception = nil
+            return (nil, exception.toString() ?? "")
+        }
+        let result = timed { guardedCaller.call(withArguments: [function] + arguments) }
+        if let exception = context.exception {
+            context.exception = nil
+            return (nil, exception.toString() ?? "")
+        }
+        // 正常返回 undefined 的也不少（自己写 thisLayer.text 的文字脚本），只有这时才去看有没有记下的异常
+        guard result?.isUndefined ?? true,
+              let error = context.objectForKeyedSubscript("__scriptError"), error.isString
+        else { return (result, nil) }
+        context.setObject(JSValue(undefinedIn: context), forKeyedSubscript: "__scriptError" as NSString)
+        return (nil, error.toString() ?? "")
+    }
+
+    private static let guardedCallSource = """
+        globalThis.__scriptError = undefined;
+        globalThis.__guardedCall = function (fn, ...args) {
+            try { return fn(...args); } catch (error) { globalThis.__scriptError = String(error); return undefined; }
+        };
+        """
 
     /// 调用一次，超过时限（被 JavaScriptCore 终止）就停用这个脚本
     private func timed(_ body: () -> JSValue?) -> JSValue? {
@@ -419,11 +446,7 @@ final class SceneScript {
         event.setObject(
             vector(SIMD3(worldPosition.x, worldPosition.y, 0)),
             forKeyedSubscript: "worldPosition" as NSString)
-        _ = function.call(withArguments: [event])
-        if let exception = context.exception {
-            problem = "\(name) 回调出错：\(exception.toString() ?? "")"
-            context.exception = nil
-        }
+        if let error = guardedCall(function, [event]).error { problem = "\(name) 回调出错：\(error)" }
     }
 
     /// 交给脚本的向量值：优先用 Vec3 实例（脚本会调 .add / .subtract 这些方法），给不出就退回普通对象

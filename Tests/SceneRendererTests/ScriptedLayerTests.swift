@@ -184,6 +184,35 @@ private func scriptedFiles(scene: Data) -> [String: Data] {
         #expect(scriptedPixel(atQuarter, 50, 5) == [255, 0, 0])
     }
 
+    /// 只有脚本会改画面的场景：桌面上每帧先跑脚本，图层状态和上次画的一样就不画。
+    /// 每帧算出同样结果的脚本（提到了时间、实际不动）不重画；真在动的每帧都重画
+    @Test func scriptOnlyScenesRedrawOnlyWhenTheStateChanges() throws {
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        func renderer(_ source: String) throws -> SceneRenderer {
+            let origin = #"{"script": \#(jsonEscape(source)), "value": "50 25 0"}"#
+            return try SceneRenderer(
+                device: device, package: try scriptedPackage(scriptedFiles(scene: scriptedScene(origin))), assets: nil)
+        }
+        // 提到了 Date（所以被当成时间相关、每帧都跑），但算出来的位置永远一样
+        let still = try renderer("export function update(value) { const now = Date.now(); value.x = 50; return value; }")
+        #expect(still.needsAnimation)
+        #expect(still.redrawsOnlyWhenStateChanges)
+        _ = try still.renderImage(width: 100, height: 50, time: 0)
+        #expect(!still.prepareFrame(at: 0.5))
+        #expect(!still.prepareFrame(at: 1))
+
+        let moving = try renderer("export function update(value) { value.y = 25 + Math.sin(engine.runtime) * 20; return value; }")
+        #expect(moving.redrawsOnlyWhenStateChanges)
+        _ = try moving.renderImage(width: 100, height: 50, time: 0)
+        #expect(moving.prepareFrame(at: 0.5))
+        // prepare 过的这一时刻再画：脚本不再跑第二遍，画出来的就是 prepare 算出的位置
+        let image = try moving.renderImage(width: 100, height: 50, time: 0.5)
+        let y = 25 + sin(Float(0.5)) * 20   // ≈ 34.6：画布 y 向上，图像里在第 15 行附近
+        #expect(scriptedPixel(image, 50, Int((50 - y).rounded())) == [255, 0, 0])
+        #expect(!moving.prepareFrame(at: 0.5), "同一时刻已经画过了")
+        #expect(moving.prepareFrame(at: 1))
+    }
+
     /// 脚本把图层关掉就不画（脚本挂在 visible 上，位置固定在画面中央）；返回 true 的对照组照常画
     @Test func scriptedVisibilityHidesTheLayer() throws {
         let device = try #require(MTLCreateSystemDefaultDevice())

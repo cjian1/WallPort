@@ -165,6 +165,38 @@ final class SceneState {
     /// 有图层被脚本改过（没改过就不需要每帧排序和算增量）
     var hasModifications: Bool { layers.values.contains(where: \.isModified) }
 
+    /// 影响画面的全部当前值的指纹（只有脚本会改画面的场景靠它判断"这一帧和上次画的一样不一样"）。
+    /// 各图层的哈希按加法合起来，和字典的遍历顺序无关
+    func signature() -> Int {
+        var total = 0
+        for layer in layers.values {
+            var hasher = Hasher()
+            hasher.combine(layer.id)
+            hasher.combine(layer.origin)
+            hasher.combine(layer.scale)
+            hasher.combine(layer.anglesZ)
+            hasher.combine(layer.alpha)
+            hasher.combine(layer.color)
+            hasher.combine(layer.visible)
+            hasher.combine(layer.order)
+            hasher.combine(layer.anchor)
+            hasher.combine(layer.parallaxDepth)
+            hasher.combine(layer.quadSize)
+            if let attachment = layer.attachment {
+                hasher.combine(attachment.columns.0)
+                hasher.combine(attachment.columns.1)
+                hasher.combine(attachment.columns.2)
+                hasher.combine(attachment.columns.3)
+            }
+            total &+= hasher.finalize()
+        }
+        var hasher = Hasher()
+        hasher.combine(total)
+        hasher.combine(layers.count)
+        hasher.combine(pendingLayers.count)
+        return hasher.finalize()
+    }
+
     /// 重新算这一帧的世界变换（脚本可能改了父图层）
     func refreshWorlds() {
         guard hasModifications else { return }

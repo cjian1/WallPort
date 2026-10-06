@@ -165,13 +165,13 @@ final class ParticleLayer {
         self.ribbonSampler = ribbonSampler
     }
 
-    /// 预模拟的时长：根系统和 static 子系统里最长的 starttime
-    var presimulation: Float {
+    /// 预模拟的时长：根系统和 static 子系统里最长的 starttime（树建好就不变，`advance` 每帧都要用，建时算一次）
+    private(set) lazy var presimulation: Float = {
         func longest(_ node: Node) -> Float {
             node.children.filter { !$0.followsParent }.map(longest).reduce(node.simulation.startTime, max)
         }
         return longest(root)
-    }
+    }()
 
     /// 有折射粒子时为 true：绘制前要把"到这里为止的画面"拷一份给着色器取样（`_rt_FullFrameBuffer`）
     var needsScreenCopy: Bool {
@@ -217,7 +217,9 @@ final class ParticleLayer {
     private func run(from start: Float, to end: Float, maxSteps: Int, pointer: SIMD2<Float>?) {
         let span = end - start
         guard span > 0 else { return }
-        let steps = min(maxSteps, max(1, Int((span / Self.stepDuration).rounded(.up))))
+        // 先在浮点里夹到上限再转整数：坏文件里 starttime、rate 写成 1e30 这类有限的大数时，
+        // 步数超出 Int 的范围，直接 Int(...) 会让整个 App 崩掉
+        let steps = Int(min(Float(maxSteps), max(1, (span / Self.stepDuration).rounded(.up))))
         let dt = span / Float(steps)
         for _ in 0..<steps { step(root, dt: dt, transform: world * root.transform, pointer: pointer) }
     }
@@ -608,35 +610,46 @@ final class ParticleLayer {
         let floats = buffer.contents().bindMemory(to: Float.self, capacity: particles.count * 4 * Self.floatsPerVertex)
         var offset = 0
         let frames = Float(max(node.frameCount, 1))
-        for particle in particles {
-            let position = basePosition(particle, anchors: anchors)
-            let velocity = particle.velocity
-            let lifeValue: Float
-            if node.frameCount > 1, node.randomFrame {
-                lifeValue = ((particle.frameSeed * frames).rounded(.down) + 0.5) / frames
-            } else {
-                let value = particle.life * node.sequenceMultiplier
-                lifeValue = value - value.rounded(.down)
-            }
-            for corner in Self.corners {
-                floats[offset + 0] = position.x
-                floats[offset + 1] = position.y
-                floats[offset + 2] = position.z
-                floats[offset + 3] = corner.x
-                floats[offset + 4] = corner.y
-                floats[offset + 5] = particle.rotation.z
-                floats[offset + 6] = particle.drawnSize
-                floats[offset + 7] = particle.color.x
-                floats[offset + 8] = particle.color.y
-                floats[offset + 9] = particle.color.z
-                floats[offset + 10] = particle.drawnAlpha
-                floats[offset + 11] = particle.rotation.x
-                floats[offset + 12] = particle.rotation.y
-                floats[offset + 13] = velocity.x
-                floats[offset + 14] = velocity.y
-                floats[offset + 15] = velocity.z
-                floats[offset + 16] = lifeValue
-                offset += Self.floatsPerVertex
+        let randomFrame = node.frameCount > 1 && node.randomFrame
+        let sequenceMultiplier = node.sequenceMultiplier
+        let corners = Self.corners
+        // 按下标直接读字段：`for particle in particles` 会把每个粒子整个拷出来（连同带子历史的数组，要做引用计数）
+        particles.withUnsafeBufferPointer { particles in
+            for index in particles.indices {
+                var position = particles[index].position + particles[index].drawnOffset
+                if let anchor = particles[index].anchor, let base = anchors?[anchor] { position += base }
+                let velocity = particles[index].velocity
+                let rotation = particles[index].rotation
+                let color = particles[index].color
+                let size = particles[index].drawnSize
+                let alpha = particles[index].drawnAlpha
+                let lifeValue: Float
+                if randomFrame {
+                    lifeValue = ((particles[index].frameSeed * frames).rounded(.down) + 0.5) / frames
+                } else {
+                    let value = particles[index].life * sequenceMultiplier
+                    lifeValue = value - value.rounded(.down)
+                }
+                for corner in corners {
+                    floats[offset + 0] = position.x
+                    floats[offset + 1] = position.y
+                    floats[offset + 2] = position.z
+                    floats[offset + 3] = corner.x
+                    floats[offset + 4] = corner.y
+                    floats[offset + 5] = rotation.z
+                    floats[offset + 6] = size
+                    floats[offset + 7] = color.x
+                    floats[offset + 8] = color.y
+                    floats[offset + 9] = color.z
+                    floats[offset + 10] = alpha
+                    floats[offset + 11] = rotation.x
+                    floats[offset + 12] = rotation.y
+                    floats[offset + 13] = velocity.x
+                    floats[offset + 14] = velocity.y
+                    floats[offset + 15] = velocity.z
+                    floats[offset + 16] = lifeValue
+                    offset += Self.floatsPerVertex
+                }
             }
         }
     }

@@ -140,6 +140,13 @@ private func meanDiff(_ first: CGImage, _ second: CGImage, size: Int = 64) -> Do
             return meanDiff(left, right)
         }
         #expect(rendererFollows(parallaxDepth: "1 1", device: device))
+        // 场景本身是静止的纯色块：不开显示链路的话，桌面上的视差根本不会跟着鼠标动
+        let parallaxOnly = try SceneRenderer(
+            device: device,
+            package: try cameraPackage(cameraSceneFiles(
+                general: #""cameraparallax": true, "cameraparallaxamount": 1, "cameraparallaxmouseinfluence": 1"#)),
+            assets: nil, targetSize: SIMD2(200, 200))
+        #expect(parallaxOnly.needsAnimation)
         // 打开视差时画面随指针变
         let moving = try difference("1 1")
         #expect(moving > 0.5)
@@ -182,6 +189,8 @@ private func meanDiff(_ first: CGImage, _ second: CGImage, size: Int = 64) -> Do
         let a = try renderer.renderImage(width: 200, height: 200, time: 0.2)
         let b = try renderer.renderImage(width: 200, height: 200, time: 0.6)
         #expect(meanDiff(a, b) > 0.2)
+        // 桌面上要持续渲染才看得到抖动：别的都静止的场景也得开显示链路
+        #expect(renderer.needsAnimation)
         #expect(SceneRenderer.smoothNoise(0.5, seed: 1) != SceneRenderer.smoothNoise(1.5, seed: 1))
     }
 

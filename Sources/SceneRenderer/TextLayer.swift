@@ -64,6 +64,8 @@ final class TextLayer {
     private let script: SceneScript?
     private let mipmapQueue: (any MTLCommandQueue)?
     private var texture: LoadedTexture?
+    /// 贴图重画过几次：只有文字会变的场景靠它判断要不要重画整个画面
+    private(set) var revision = 0
     private var currentString: String?
     private var lastCheck: Float = -.greatestFiniteMagnitude
 
@@ -150,6 +152,7 @@ final class TextLayer {
     }
 
     private func rebuild(_ string: String) {
+        revision &+= 1
         if !isBoxFixed {
             // WE 的文字框随内容自动调整：字号调大后按需放大，以中心为准向四周扩；
             // 同时量编辑器里的静态文字，再留 10%，时钟之类的字符串以后变长也放得下

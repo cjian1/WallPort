@@ -166,6 +166,19 @@ private final class FakeCM: @unchecked Sendable {
         #expect(cm.connectionCount == 2)
     }
 
+    /// 空闲时断开（心跳不再定时唤醒网络）：会话不动，下一次操作自己重新登一次 CM
+    @Test func idleConnectionCanBeClosedAndComesBackOnDemand() async throws {
+        let cm = FakeCM()
+        let native = native(cm)
+        #expect(await native.restore(session) == .connected(session))
+        #expect(cm.logOnCount == 1)
+        #expect(await native.closeIdleConnection())
+        #expect(await !native.closeIdleConnection(), "已经断开了，再断一次什么也不做")
+        let files = try await native.subscribedFiles(session: session)
+        #expect(files.map(\.id) == ["3807008481"])
+        #expect(cm.logOnCount == 2, "要用时自动重连")
+    }
+
     /// 没网：会话不能被当成过期（不然每次断网都要重新登录）
     @Test func unreachableSteamKeepsTheSession() async throws {
         let native = WorkshopNative(

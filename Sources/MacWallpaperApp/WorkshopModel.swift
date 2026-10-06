@@ -140,10 +140,14 @@ final class WorkshopModel: NSObject, ObservableObject {
     @Published private(set) var queue: [QueueItem] = []
     /// 正在下载的条目下到多少了（0…1）；还在准备（取清单）时没有
     @Published private(set) var progress: [String: Double] = [:]
-    @Published private(set) var isDownloading = false
+    @Published private(set) var isDownloading = false {
+        didSet { if !isDownloading { scheduleIdleDisconnect() } }
+    }
     /// 用户点了「暂停」：正在下的那件停下、放回等待，队列不往下走，点「继续」再接着下
     @Published private(set) var isPaused = false
-    @Published private(set) var isSyncing = false
+    @Published private(set) var isSyncing = false {
+        didSet { if !isSyncing { scheduleIdleDisconnect() } }
+    }
     @Published private(set) var message: String?
 
     /// 从创意工坊下载的壁纸放在这里（每件一个以编号命名的文件夹）
@@ -311,6 +315,8 @@ final class WorkshopModel: NSObject, ObservableObject {
         subscribedIDs = Set(AppFolder.settings.stringArray(forKey: Self.subscribedIDsKey(stored.accountName)) ?? [])
         subscriptionDates = Self.loadSubscriptionDates(stored.accountName)
         Task {
+            beginConnectionUse()
+            defer { endConnectionUse() }
             switch await native.restore(stored) {
             case .connected:
                 log("创意工坊：用存着的会话登上 Steam（账号 \(stored.accountName)）")
@@ -330,7 +336,13 @@ final class WorkshopModel: NSObject, ObservableObject {
         refreshLocalItems()
         // 先把和 Steam 的连接接好（睡眠唤醒、换网络后连接多半已经断了）：
         // 用户接着点订阅 / 取消订阅时就不用再等重连登录
-        if let session { Task { _ = await native.restore(session) } }
+        if let session {
+            Task {
+                beginConnectionUse()
+                defer { endConnectionUse() }
+                _ = await native.restore(session)
+            }
+        }
         if items.isEmpty, !isLoadingPage, loadError == nil { reloadGallery() }
         if !didPromptLogin, !isLoggedIn {
             didPromptLogin = true
@@ -693,9 +705,54 @@ final class WorkshopModel: NSObject, ObservableObject {
         loginStep = .failed(reason)
     }
 
+    // MARK: 空闲断开
+
+    /// 壁纸库窗口开着：创意工坊页随时会用到连接，不断开
+    var isLibraryOpen = false {
+        didSet { if isLibraryOpen != oldValue { scheduleIdleDisconnect() } }
+    }
+    /// 正在用和 Steam 的连接的操作数
+    private var connectionUsers = 0
+    private var idleDisconnect: Task<Void, Never>?
+    /// 没人用多久以后断开
+    static let idleDisconnectDelay: Duration = .seconds(120)
+
+    /// 启动时用存着的会话连上 CM 以后，连接原来一直靠心跳（约每 9 秒一次）撑着，壁纸库从来不开也一样——
+    /// 壁纸常驻后台，等于一直定时唤醒网络。现在窗口关着、又没有下载 / 同步 / 别的操作时，空闲两分钟就断开；
+    /// 之后的操作照旧自己重连（约 1 秒），切到创意工坊页时也会先连上
+    private var isIdle: Bool {
+        connectionUsers == 0 && !isDownloading && !isSyncing && !isLibraryOpen && session != nil
+    }
+
+    private func beginConnectionUse() {
+        connectionUsers += 1
+        idleDisconnect?.cancel()
+        idleDisconnect = nil
+    }
+
+    private func endConnectionUse() {
+        connectionUsers -= 1
+        scheduleIdleDisconnect()
+    }
+
+    private func scheduleIdleDisconnect() {
+        idleDisconnect?.cancel()
+        idleDisconnect = nil
+        guard isIdle else { return }
+        idleDisconnect = Task { [weak self] in
+            try? await Task.sleep(for: Self.idleDisconnectDelay)
+            guard !Task.isCancelled, let self, self.isIdle else { return }
+            if await self.native.closeIdleConnection() {
+                self.log("创意工坊：空闲了，先断开和 Steam 的连接（要用时自动重连）")
+            }
+        }
+    }
+
     /// 需要登录的操作都经过这里：Steam 明确不认存着的会话了，就当作退出登录（调用方再弹登录框）
     private func withSession<T>(_ body: (SteamCMSession) async throws -> T) async throws -> T {
         guard let session else { throw WorkshopNative.Failure.notLoggedIn }
+        beginConnectionUse()
+        defer { endConnectionUse() }
         do {
             return try await body(session)
         } catch WorkshopNative.Failure.notLoggedIn {

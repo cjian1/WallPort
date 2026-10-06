@@ -61,10 +61,46 @@ public final class SceneRenderer: @unchecked Sendable {
     public let effectSummaries: [String]
     /// 有特效或粒子时画面随时间变化，需要持续渲染
     public var needsAnimation: Bool {
-        // 延后到绘制时才算的链子不在 `chains` 里，但同样会让画面随时间变化
+        hasDynamicText || hasScriptedAnimation || animatesOnItsOwn
+    }
+
+    /// 画面只会因为脚本改了图层（位置、显隐、透明度、颜色…）或文字（时钟）变了才变，没有特效、粒子、骨骼动画
+    /// 这类每帧自己在动的东西。桌面上这类场景每帧只跑脚本、查文字，图层状态真的变了才画（见 `prepareFrame`）。
+    /// 本机有 7 个"静态图 + 时钟 + 一个每帧算出同样结果的属性脚本"的场景，原来自动帧率最低也按 20 帧整屏重画，
+    /// 每帧还要让系统重新合成桌面，而时钟一分钟才变一次
+    public var redrawsOnlyWhenStateChanges: Bool {
+        needsAnimation && !animatesOnItsOwn && !usesAudio && !needsPointerEvents
+    }
+
+    /// 不靠脚本和文字、自己就会随时间（或鼠标）变的东西
+    private var animatesOnItsOwn: Bool {
+        // 延后到绘制时才算的链子不在 `chains` 里，但同样会让画面随时间变化。
+        // 镜头抖动随时间动、镜头视差跟着鼠标动：不算进来的话，只有这两样会动的场景在桌面上不开显示链路，
+        // 抖动永远停在第一帧、视差也不跟鼠标（离线出图看不出来）。鼠标不动时自动帧率会把视差场景降到最低一档。
+        // 视频贴图同理：没挂特效的视频图层原来只会显示第一帧
         !chains.isEmpty || draws.contains { $0.chain != nil } || !particleLayers.isEmpty
-            || hasPuppetAnimation || hasDynamicText || hasScriptedAnimation
-            || camera != nil || hasMaterialAnimation || draws.contains { $0.sprite != nil }
+            || hasPuppetAnimation || camera != nil || hasMaterialAnimation || draws.contains { $0.sprite != nil }
+            || draws.contains { $0.texture?.video != nil }
+            || cameraEffects.shakeEnabled || cameraEffects.parallaxEnabled
+    }
+
+    /// 只有脚本 / 文字会改画面的场景（`redrawsOnlyWhenStateChanges`）每帧先调它：跑脚本、刷新文字，
+    /// 返回画面要不要重画（图层状态或文字和上次画的时候不一样）。紧接着在同一时刻 `encode` 时不会再跑一遍脚本
+    public func prepareFrame(at time: Float) -> Bool {
+        updateFrame(at: time)
+        preparedTime = time
+        for draw in draws { _ = draw.text?.texture(at: time) }
+        return stateSignature() != drawnStateSignature
+    }
+
+    /// 影响画面的状态的指纹：全部图层的当前值（脚本和场景对象接口改的都在这里）、绘制项个数（运行时建的图层）、
+    /// 文字贴图的版本
+    private func stateSignature() -> Int {
+        var hasher = Hasher()
+        hasher.combine(state.signature())
+        hasher.combine(draws.count)
+        for draw in draws { if let text = draw.text { hasher.combine(text.revision) } }
+        return hasher.finalize()
     }
     /// 有材质着色器用了 g_Time（旗帜的飘动就是这样）：画面随时间变，要持续渲染
     private let hasMaterialAnimation: Bool
@@ -146,6 +182,10 @@ public final class SceneRenderer: @unchecked Sendable {
     private var drawIndexByObject: [Int: Int]
     /// 上一次绘制的时间，用来算 engine.frametime
     private var lastEncodeTime: Float?
+    /// `prepareFrame` 已经把脚本跑到了这一时刻（同一时刻的 `encode` 不再跑第二遍）
+    private var preparedTime: Float?
+    /// 上一次画出来的那一帧的状态指纹（只有 `redrawsOnlyWhenStateChanges` 的场景才记）
+    private var drawnStateSignature: Int?
     /// 系统音频频谱（跟着音乐律动的特效和脚本用它）；nil 表示没有音频来源
     public var audioSpectrum: SystemAudioSpectrum?
     /// 视频贴图要不要等这一刻的帧解出来。离线出图要准确的那一帧（默认）；桌面上设成 false：
@@ -484,14 +524,16 @@ public final class SceneRenderer: @unchecked Sendable {
         into target: any MTLTexture, commandBuffer: any MTLCommandBuffer, time: Float = 0,
         pointer: SIMD2<Float> = SIMD2(0.5, 0.5), pointerEvents: [PointerEvent] = []
     ) {
-        // 脚本运行时建的图层（thisScene.createLayer）：这一帧把它们建成绘制项
-        for request in state.drainPendingLayers() { appendRuntimeLayer(request.id, model: request.model) }
+        // 脚本（`prepareFrame` 在这一时刻已经跑过的就不再跑）
+        if preparedTime != time { updateFrame(at: time) }
+        preparedTime = nil
         // 文字可能变了（时钟）：先把贴图刷新到当前字符串，挂了特效链的输入也跟着换
         for draw in draws {
             guard let text = draw.text,
                   let loaded = text.texture(at: time, canvasScale: canvasScaleFor(target)) else { continue }
             if let chain = draw.chain, chain.source.texture !== loaded.texture { chain.source = loaded }
         }
+        if redrawsOnlyWhenStateChanges { drawnStateSignature = stateSignature() }
         // 精灵图动画图层上的特效：链子的输入换成这一时刻的那一帧
         for draw in draws {
             guard let sprite = draw.sprite, let chain = draw.chain else { continue }
@@ -501,21 +543,6 @@ public final class SceneRenderer: @unchecked Sendable {
                 usesNearestFiltering: false)
             chain.sourceCorners = sprite.corners(of: index)
         }
-        // 属性脚本（位置、悬浮缩放、显隐…）：时间相关的字段每帧重算
-        let frameTime = lastEncodeTime.map { min(max(time - $0, 0), 0.25) } ?? 1 / 30
-        lastEncodeTime = time
-        // 音频频谱先推给脚本（`engine.registerAudioBuffers` 返回的数组），脚本这一帧就能用到当前的频谱
-        if let audio = audioSpectrum?.bands {
-            for draw in draws { draw.scripted?.refreshAudio(audio) }
-            for layer in controllerScripts { layer.refreshAudio(audio) }
-        }
-        // 先跑"控制器"脚本（挂在没有绘制的图层上，例如幻灯片控制器），它们会改别的图层
-        for layer in controllerScripts { layer.evaluate(at: time, frameTime: frameTime) }
-        for draw in draws { draw.scripted?.evaluate(at: time, frameTime: frameTime) }
-        // 挂在木偶骨骼上的图层：按父木偶这一帧的骨骼姿势挪到挂点上
-        updateAttachments(at: time)
-        // 脚本可能改了父图层，世界变换要重算（没被改过的图层直接复用构建时的值）
-        state.refreshWorlds()
         // 文字、纯色图层的颜色和透明度在特效之前作用（见 colorIntoChain）。要在脚本跑完之后刷：
         // 脚本这一帧改的颜色 / 透明度当帧就要进链子（颜色变了静态链也会重算，见 EffectChain.inputColor）
         for draw in draws where draw.colorIntoChain {
@@ -732,6 +759,27 @@ public final class SceneRenderer: @unchecked Sendable {
         if let bloom, let frame = frameCopy.copy(of: target, device: device, commandBuffer: commandBuffer) {
             bloom.encode(into: commandBuffer, target: target, frame: frame)
         }
+    }
+
+    /// 这一时刻的图层状态：运行时建的图层、属性脚本和控制器脚本、挂在骨骼上的图层、世界变换
+    private func updateFrame(at time: Float) {
+        // 脚本运行时建的图层（thisScene.createLayer）：这一帧把它们建成绘制项
+        for request in state.drainPendingLayers() { appendRuntimeLayer(request.id, model: request.model) }
+        // 属性脚本（位置、悬浮缩放、显隐…）：时间相关的字段每帧重算
+        let frameTime = lastEncodeTime.map { min(max(time - $0, 0), 0.25) } ?? 1 / 30
+        lastEncodeTime = time
+        // 音频频谱先推给脚本（`engine.registerAudioBuffers` 返回的数组），脚本这一帧就能用到当前的频谱
+        if let audio = audioSpectrum?.bands {
+            for draw in draws { draw.scripted?.refreshAudio(audio) }
+            for layer in controllerScripts { layer.refreshAudio(audio) }
+        }
+        // 先跑"控制器"脚本（挂在没有绘制的图层上，例如幻灯片控制器），它们会改别的图层
+        for layer in controllerScripts { layer.evaluate(at: time, frameTime: frameTime) }
+        for draw in draws { draw.scripted?.evaluate(at: time, frameTime: frameTime) }
+        // 挂在木偶骨骼上的图层：按父木偶这一帧的骨骼姿势挪到挂点上
+        updateAttachments(at: time)
+        // 脚本可能改了父图层，世界变换要重算（没被改过的图层直接复用构建时的值）
+        state.refreshWorlds()
     }
 
     /// 脚本运行时建的图层：读模型 → 材质 → 第一张贴图，按图层当前的 origin/scale/朝向摆一个四边形。
@@ -2120,14 +2168,14 @@ public final class SceneRenderer: @unchecked Sendable {
                         minLength: component.float("minlength", 0))
                 case "ropetrail":
                     renderer = .ropeTrail(
-                        length: component.float("length", 0.5), segments: Int(component.float("segments", 0)),
-                        subdivision: Int(component.float("subdivision", 0)), uvScale: component.float("uvscale", 1),
+                        length: component.float("length", 0.5), segments: Int(saturating: component.float("segments", 0)),
+                        subdivision: Int(saturating: component.float("subdivision", 0)), uvScale: component.float("uvscale", 1),
                         scrolling: component.float("uvscrolling", 0) != 0)
                 case "rope":
                     renderer = .rope(
                         // WE 文档的演示视频里，rope 的拐角是圆的（几个粒子就能连成流畅的弧线），
                         // 所以 subdivision 的默认值取正数；`~/wp` 里显式写过的值是 0 和 3
-                        subdivision: Int(component.float("subdivision", 3)), uvScale: component.float("uvscale", 1),
+                        subdivision: Int(saturating: component.float("subdivision", 3)), uvScale: component.float("uvscale", 1),
                         scrolling: component.float("uvscrolling", 0) != 0)
                 default:
                     unsupported["粒子画法 \(component.name)（按精灵画）", default: 0] += 1

@@ -11,16 +11,20 @@ public final class EventLog: @unchecked Sendable {
     private let logger = Logger(subsystem: "local.macwallpaper", category: "desktop")
     private let lock = NSLock()
     private let formatter: DateFormatter
+    /// 当前文件大概多大（启动时读一次，之后每写一行加上）：壁纸常驻后台，一跑就是几周，
+    /// 只在启动时检查的话文件会一直长下去
+    private var approximateSize = 0
 
     /// 超过这个大小就滚动一次，只保留上一份
-    private static let maxFileSize = 5 * 1024 * 1024
+    private let maxFileSize: Int
 
     public static var defaultFileURL: URL {
         AppFolder.logs.appendingPathComponent("desktop.log")
     }
 
-    public init(fileURL: URL = EventLog.defaultFileURL) {
+    public init(fileURL: URL = EventLog.defaultFileURL, maxFileSize: Int = 5 * 1024 * 1024) {
         self.fileURL = fileURL
+        self.maxFileSize = maxFileSize
         formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
@@ -36,6 +40,8 @@ public final class EventLog: @unchecked Sendable {
         defer { lock.unlock() }
         let line = "\(formatter.string(from: Date())) \(message)\n"
         guard let data = line.data(using: .utf8) else { return }
+        approximateSize += data.count
+        if approximateSize > maxFileSize { rotateIfNeeded() }
         if let handle = try? FileHandle(forWritingTo: fileURL) {
             defer { try? handle.close() }
             _ = try? handle.seekToEnd()
@@ -47,11 +53,15 @@ public final class EventLog: @unchecked Sendable {
 
     private func rotateIfNeeded() {
         let manager = FileManager.default
-        guard let size = try? manager.attributesOfItem(atPath: fileURL.path)[.size] as? Int,
-              size > Self.maxFileSize
-        else { return }
+        guard let size = try? manager.attributesOfItem(atPath: fileURL.path)[.size] as? Int else {
+            approximateSize = 0
+            return
+        }
+        approximateSize = size
+        guard size > maxFileSize else { return }
         let previous = fileURL.appendingPathExtension("1")
         try? manager.removeItem(at: previous)
         try? manager.moveItem(at: fileURL, to: previous)
+        approximateSize = 0
     }
 }

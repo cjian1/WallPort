@@ -45,6 +45,8 @@ func benchScenes(in directory: String, assets: URL, frames: Int) -> Int32 {
     }
     var rows: [Row] = []
     var staticCount = 0
+    /// 只有脚本 / 文字会改画面的场景：桌面上图层状态变了才画（见 `redrawsOnlyWhenStateChanges`）
+    var stateDrivenCount = 0
     for folder in folders {
         guard let project = try? WallpaperProject(folder: folder), project.kind == .scene,
               let package = try? ScenePackage(contentsOf: folder.appendingPathComponent("scene.pkg"))
@@ -61,6 +63,10 @@ func benchScenes(in directory: String, assets: URL, frames: Int) -> Int32 {
         }
         guard renderer.needsAnimation else {
             staticCount += 1
+            continue
+        }
+        guard !renderer.redrawsOnlyWhenStateChanges else {
+            stateDrivenCount += 1
             continue
         }
         func frame(_ index: Int) -> (thread: Double, wall: Double, gpu: Double) {
@@ -99,7 +105,8 @@ func benchScenes(in directory: String, assets: URL, frames: Int) -> Int32 {
             threadCPU: thread / Double(frames), wall: wall / Double(frames), processCPU: process / Double(frames),
             gpu: gpu / Double(frames)))
     }
-    print("屏幕 \(width)×\(height)，每秒 \(fps) 帧推进，每个场景量 \(frames) 帧；静态场景 \(staticCount) 个（桌面上只画一次，不计）")
+    print("屏幕 \(width)×\(height)，每秒 \(fps) 帧推进，每个场景量 \(frames) 帧；静态场景 \(staticCount) 个（桌面上只画一次，不计）、"
+        + "只有脚本 / 文字会改画面的 \(stateDrivenCount) 个（状态变了才画，不计）")
     print("编号          内容                 CPU/帧(本线程)  主线程占用/帧  CPU/帧(整个进程)  GPU/帧   \(fps) 帧时约占 CPU  GPU")
     let percent = Double(fps) / 10
     for row in rows.sorted(by: { $0.processCPU > $1.processCPU }) {

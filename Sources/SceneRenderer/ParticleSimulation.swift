@@ -255,6 +255,8 @@ final class ParticleSimulation {
     let sceneForce: SIMD3<Float>
     /// 有没有 movement 算子。有的话位置由它积分；没有时外力这边补一次位置积分
     private let hasMovementOperator: Bool
+    /// 湍流噪声格点值的缓存（有 turbulence 算子时才建，见 `NoiseLatticeCache`）
+    private let noiseCache: NoiseLatticeCache?
     /// 历史按模拟步长采样，所以容量 = 时长 / 步长；上限 64 条，够画长拖尾了
     private var trailCapacity: Int {
         trailLength > 0 ? min(64, Int(saturating: (trailLength / Self.trailStep).rounded(.up)) + 2) : 0
@@ -310,10 +312,12 @@ final class ParticleSimulation {
                 sign: component.vector("sign", .zero),
                 speedMin: component.float("speedmin", 0),
                 speedMax: component.float("speedmax", 0),
-                instantaneous: Int(component.float("instantaneous", 0)),
+                // 一次性发射的个数：负数会让 `0..<instantaneous` 直接崩，太大的数要么转 Int 时崩、要么空转上万亿次
+                // 卡死主线程；超过粒子上限的部分本来也发不出来
+                instantaneous: min(max(0, Int(saturating: component.float("instantaneous", 0))), definition.maxCount),
                 duration: component.float("duration", 0),
                 delay: component.float("delay", 0),
-                controlPoint: Int(component.float("controlpoint", 0)))
+                controlPoint: Int(saturating: component.float("controlpoint", 0)))
         }
 
         initializers = definition.initializers.compactMap { c in
@@ -332,7 +336,7 @@ final class ParticleSimulation {
                     hue: Self.range(c.float("huemin", 0), c.float("huemax", 1)),
                     saturation: Self.range(c.float("saturationmin", 1), c.float("saturationmax", 1)),
                     value: Self.range(c.float("valuemin", 1), c.float("valuemax", 1)),
-                    steps: Int(c.float("huesteps", 0)))
+                    steps: Int(saturating: c.float("huesteps", 0)))
             case "velocityrandom":
                 return .velocity(min: c.vector("min", SIMD3(-32, -32, 0)), max: c.vector("max", SIMD3(32, 32, 0)))
             case "rotationrandom":
@@ -351,11 +355,11 @@ final class ParticleSimulation {
                     speed: c.has("speedmin") || c.has("speedmax")
                         ? (min: c.vector("speedmin", .zero), max: c.vector("speedmax", .zero))
                         : nil,
-                    controlPoint: Int(c.float("controlpoint", 0)))
+                    controlPoint: Int(saturating: c.float("controlpoint", 0)))
             case "mapsequencebetweencontrolpoints":
                 return .mapSequenceBetweenControlPoints(
                     sequence: Self.sequence(c),
-                    start: Int(c.float("controlpointstart", 0)), end: Int(c.float("controlpointend", 1)))
+                    start: Int(saturating: c.float("controlpointstart", 0)), end: Int(saturating: c.float("controlpointend", 1)))
             default:
                 unsupported.append("初始化 \(c.name)")
                 return nil
@@ -380,7 +384,7 @@ final class ParticleSimulation {
                 case "distancetocontrolpoint":
                     // 控制点编号写在 inputcontrolpoint0 / 1 … 里
                     let slot = (0..<8).first { c.has("inputcontrolpoint\($0)") } ?? 0
-                    input = .distanceToControlPoint(Int(c.float("inputcontrolpoint\(slot)", 0)))
+                    input = .distanceToControlPoint(Int(saturating: c.float("inputcontrolpoint\(slot)", 0)))
                 default:
                     unsupported.append("remapvalue 的输入 \(raw)")
                     return nil
@@ -391,7 +395,7 @@ final class ParticleSimulation {
                 // 两处真实数据都是二选一，同时写时按 input 处理
                 unsupported.append("remapvalue 同时写了 input 和 transformfunction（按 input 处理）")
             }
-            let flags = Int(c.float("flags", 0))
+            let flags = Int(saturating: c.float("flags", 0))
             return RemapValue(
                 input: input,
                 inputRangeMin: c.numbers["inputrangemin"] ?? [0],
@@ -442,7 +446,7 @@ final class ParticleSimulation {
             case "vortex":
                 return .vortex(
                     axis: c.vector("axis", SIMD3(0, 0, 1)),
-                    controlPoint: Int(c.float("controlpoint", 0)),
+                    controlPoint: Int(saturating: c.float("controlpoint", 0)),
                     origin: c.vector("origin", .zero),
                     distanceInner: c.float("distanceinner", 0),
                     distanceOuter: c.float("distanceouter", 100),
@@ -462,7 +466,7 @@ final class ParticleSimulation {
                     mask: c.vector("mask", SIMD3(1, 1, 0)))
             case "controlpointattract":
                 return .controlPointAttract(
-                    controlPoint: Int(c.float("controlpoint", 0)), origin: c.vector("origin", .zero),
+                    controlPoint: Int(saturating: c.float("controlpoint", 0)), origin: c.vector("origin", .zero),
                     scale: c.float("scale", 100), threshold: c.float("threshold", 100))
             case "remapvalue":
                 guard let remap = makeRemapValue(c) else { return nil }
@@ -483,6 +487,8 @@ final class ParticleSimulation {
         controlPointFollowsPointer = follows
         self.unsupported = unsupported
         hasMovementOperator = operators.contains { if case .movement = $0 { return true } else { return false } }
+        noiseCache = operators.contains { if case .turbulence = $0 { return true } else { return false } }
+            ? NoiseLatticeCache() : nil
         accumulators = Array(repeating: 0, count: emitters.count)
         instantaneousDone = Array(repeating: false, count: emitters.count)
     }
@@ -494,7 +500,7 @@ final class ParticleSimulation {
     private static func sequence(_ c: ParticleDefinition.Component) -> ControlPointSequence {
         let bounds = c.vector("bounds", SIMD3(0, 1, 0))
         return ControlPointSequence(
-            count: Int(c.float("count", 1)), bounds: range(bounds.x, bounds.y),
+            count: Int(saturating: c.float("count", 1)), bounds: range(bounds.x, bounds.y),
             isMirror: (c.strings["limitbehavior"] ?? "").lowercased() == "mirror")
     }
 
@@ -523,9 +529,18 @@ final class ParticleSimulation {
         let speedFactor = override.speed
 
         // 1. 更新已有粒子。数组先挪到局部变量里再改：类的属性每访问一次元素都要做一次运行时的独占检查
-        //（5 万个粒子时占了模拟时间的一成多），局部变量没有。挪走以后原来的属性不再引用它，改的时候不会复制
-        var alive = particles
-        particles = []
+        //（5 万个粒子时占了模拟时间的一成多），局部变量没有。用 swap 挪进挪出：两边始终只有一个持有存储，
+        // 改的时候不会复制（原来写成 `particles = alive`，局部变量活到函数结束，下面发射时的第一次 append
+        // 就把整个数组连同每个粒子复制一遍）
+        var alive: [Particle] = []
+        swap(&alive, &particles)
+        // 阻力的衰减系数 exp(-drag·dt) 对这一步的所有粒子都一样，先算好（原来每个粒子算一次 exp）
+        let decay = operators.map { op -> Float in
+            switch op {
+            case .movement(_, let drag), .angularMovement(_, let drag): drag != 0 ? exp(-drag * dt) : 1
+            default: 1
+            }
+        }
         var index = 0
         while index < alive.count {
             alive[index].age += dt
@@ -536,11 +551,13 @@ final class ParticleSimulation {
                 alive.removeLast()
                 continue
             }
-            apply(to: &alive[index], dt: dt, speedFactor: speedFactor, controlPoints: controlPoints, anchors: anchors)
-            recordTrail(&alive[index], anchors: anchors)
+            apply(
+                to: &alive[index], dt: dt, decay: decay, speedFactor: speedFactor, controlPoints: controlPoints,
+                anchors: anchors)
+            if trailLength > 0 { recordTrail(&alive[index], anchors: anchors) }
             index += 1
         }
-        particles = alive
+        swap(&alive, &particles)
 
         // 2. 发射
         if let anchors {
@@ -701,7 +718,7 @@ final class ParticleSimulation {
     }
 
     private func apply(
-        to particle: inout Particle, dt: Float, speedFactor: Float, controlPoints: [SIMD3<Float>],
+        to particle: inout Particle, dt: Float, decay: [Float], speedFactor: Float, controlPoints: [SIMD3<Float>],
         anchors: [UInt32: SIMD3<Float>]?
     ) {
         let life = particle.life
@@ -719,11 +736,11 @@ final class ParticleSimulation {
             switch op {
             case .movement(let gravity, let drag):
                 particle.velocity += gravity * speedFactor * dt
-                if drag != 0 { particle.velocity *= exp(-drag * dt) }
+                if drag != 0 { particle.velocity *= decay[index] }
                 particle.position += particle.velocity * dt
             case .angularMovement(let force, let drag):
                 particle.angularVelocity += force * speedFactor * dt
-                if drag != 0 { particle.angularVelocity *= exp(-drag * dt) }
+                if drag != 0 { particle.angularVelocity *= decay[index] }
                 particle.rotation += particle.angularVelocity * dt
             case .alphaFade(let fadeIn, let fadeOut):
                 if fadeIn > 0, life < fadeIn { alpha *= life / fadeIn }
@@ -776,7 +793,7 @@ final class ParticleSimulation {
             case .turbulence(let scale, let timeScale, let speed, let phase, let mask):
                 let p = Self.pick(phase, particle.id, salt)
                 let sample = particle.position * scale + SIMD3(repeating: time * timeScale * 0.1 + p)
-                let force = ParticleNoise.vector(sample) * mask * Self.pick(speed, particle.id, salt + 1)
+                let force = ParticleNoise.vector(sample, cache: noiseCache) * mask * Self.pick(speed, particle.id, salt + 1)
                 particle.velocity += force * speedFactor * dt
             case .controlPointAttract(let controlPoint, let origin, let scale, let threshold):
                 let target = controlPoints[min(max(controlPoint, 0), 7)] + origin
@@ -968,18 +985,39 @@ struct ParticleRandom {
 
 /// 平滑的三维噪声（值噪声，三线性插值），湍流用。输出每个分量在 -1…1
 enum ParticleNoise {
-    static func vector(_ p: SIMD3<Float>) -> SIMD3<Float> {
-        SIMD3(value(p, 0), value(p + SIMD3(31.4, 17.9, 5.3), 1), value(p + SIMD3(-11.7, 43.1, 23.9), 2))
+    /// 一个格子 8 个角上的随机值（-1…1）
+    struct Corners {
+        var c000: Float, c100: Float, c010: Float, c110: Float
+        var c001: Float, c101: Float, c011: Float, c111: Float
     }
 
-    static func value(_ p: SIMD3<Float>, _ channel: UInt32) -> Float {
+    static func vector(_ p: SIMD3<Float>, cache: NoiseLatticeCache? = nil) -> SIMD3<Float> {
+        SIMD3(
+            value(p, 0, cache: cache), value(p + SIMD3(31.4, 17.9, 5.3), 1, cache: cache),
+            value(p + SIMD3(-11.7, 43.1, 23.9), 2, cache: cache))
+    }
+
+    static func value(_ p: SIMD3<Float>, _ channel: UInt32, cache: NoiseLatticeCache? = nil) -> Float {
         let cell = p.rounded(.down)
         let f = p - cell
         let u = f * f * (SIMD3(repeating: 3) - 2 * f)
-        // 坏的粒子参数（NaN、极大的重力）会让位置变成 NaN / 无穷大，这里不能崩
-        let cx = Int32(truncatingIfNeeded: Int(saturating: cell.x))
-        let cy = Int32(truncatingIfNeeded: Int(saturating: cell.y))
-        let cz = Int32(truncatingIfNeeded: Int(saturating: cell.z))
+        // 坏的粒子参数（NaN、极大的重力）会让位置变成 NaN / 无穷大，这里不能崩：用 simd 的饱和转换（一条向量指令，
+        // 不会陷入）。|x| < 2³¹ 时和原来逐个 Int(saturating:) 再截成 Int32 的结果一样——原来每个噪声值要三次函数调用，
+        // 粒子多的场景里占了模拟时间的一成半；NaN 时格点不同，但 f 也是 NaN，结果照样是 NaN
+        let index = simd_int_sat(cell)
+        let cx = index.x, cy = index.y, cz = index.z
+        let c = cache?.corners(cx, cy, cz, channel) ?? corners(cx, cy, cz, channel)
+        let x00 = c.c000 + (c.c100 - c.c000) * u.x
+        let x10 = c.c010 + (c.c110 - c.c010) * u.x
+        let x01 = c.c001 + (c.c101 - c.c001) * u.x
+        let x11 = c.c011 + (c.c111 - c.c011) * u.x
+        let y0 = x00 + (x10 - x00) * u.y
+        let y1 = x01 + (x11 - x01) * u.y
+        return y0 + (y1 - y0) * u.z
+    }
+
+    /// 格子 (cx, cy, cz) 的 8 个角各哈希一次
+    static func corners(_ cx: Int32, _ cy: Int32, _ cz: Int32, _ channel: UInt32) -> Corners {
         func corner(_ dx: Int32, _ dy: Int32, _ dz: Int32) -> Float {
             let x = UInt32(bitPattern: cx &+ dx)
             let y = UInt32(bitPattern: cy &+ dy)
@@ -987,15 +1025,52 @@ enum ParticleNoise {
             let key = x &* 73_856_093 ^ y &* 19_349_663 ^ z &* 83_492_791
             return ParticleRandom.hash(key, channel) * 2 - 1
         }
-        // 8 个角各算一次（原来 (0,0,0) 这类角每个算两遍，一共 12 次哈希）
-        let c000 = corner(0, 0, 0), c100 = corner(1, 0, 0), c010 = corner(0, 1, 0), c110 = corner(1, 1, 0)
-        let c001 = corner(0, 0, 1), c101 = corner(1, 0, 1), c011 = corner(0, 1, 1), c111 = corner(1, 1, 1)
-        let x00 = c000 + (c100 - c000) * u.x
-        let x10 = c010 + (c110 - c010) * u.x
-        let x01 = c001 + (c101 - c001) * u.x
-        let x11 = c011 + (c111 - c011) * u.x
-        let y0 = x00 + (x10 - x00) * u.y
-        let y1 = x01 + (x11 - x01) * u.y
-        return y0 + (y1 - y0) * u.z
+        return Corners(
+            c000: corner(0, 0, 0), c100: corner(1, 0, 0), c010: corner(0, 1, 0), c110: corner(1, 1, 0),
+            c001: corner(0, 0, 1), c101: corner(1, 0, 1), c011: corner(0, 1, 1), c111: corner(1, 1, 1))
+    }
+}
+
+/// 湍流噪声格点值的缓存（直接映射）：同一个格子 8 个角的哈希只算一次。
+///
+/// 湍流的格子很大（scale 0.005 时一格约 200 画布单位），几万个粒子挤在几百个格子里，原来每个粒子每步都要
+/// 算 3 × 8 次哈希（1994794519 两套各 2.5 万个粒子，噪声占了模拟时间的四成多）。存的就是原来算出来的值，
+/// 结果逐位不变。每个粒子系统一份，和模拟本身一样只在 ParticleLayer 的锁里用
+final class NoiseLatticeCache {
+    private struct Key: Equatable {
+        var x: Int32, y: Int32, z: Int32, channel: UInt32
+    }
+
+    private static let capacity = 2048
+    private let keys: UnsafeMutablePointer<Key>
+    private let values: UnsafeMutablePointer<ParticleNoise.Corners>
+
+    init() {
+        keys = .allocate(capacity: Self.capacity)
+        // 通道只用 0…2，UInt32.max 的空位不会被当成命中
+        keys.initialize(repeating: Key(x: 0, y: 0, z: 0, channel: .max), count: Self.capacity)
+        values = .allocate(capacity: Self.capacity)
+        values.initialize(
+            repeating: ParticleNoise.Corners(c000: 0, c100: 0, c010: 0, c110: 0, c001: 0, c101: 0, c011: 0, c111: 0),
+            count: Self.capacity)
+    }
+
+    deinit {
+        keys.deallocate()
+        values.deallocate()
+    }
+
+    @inline(__always)
+    func corners(_ cx: Int32, _ cy: Int32, _ cz: Int32, _ channel: UInt32) -> ParticleNoise.Corners {
+        var hash = UInt32(bitPattern: cx) &* 0x9E37_79B1 ^ UInt32(bitPattern: cy) &* 0x85EB_CA77
+            ^ UInt32(bitPattern: cz) &* 0xC2B2_AE3D ^ channel &* 0x27D4_EB2F
+        hash ^= hash >> 15
+        let slot = Int(hash & UInt32(Self.capacity - 1))
+        let key = Key(x: cx, y: cy, z: cz, channel: channel)
+        if keys[slot] == key { return values[slot] }
+        let computed = ParticleNoise.corners(cx, cy, cz, channel)
+        keys[slot] = key
+        values[slot] = computed
+        return computed
     }
 }

@@ -92,6 +92,53 @@ import WallpaperFormats
         #expect(try await run(speed: 12, seconds: 12) == 30)
     }
 
+    /// 只有脚本会改画面的场景：桌面上每帧先跑脚本，算出来的和上次画的一样就不画（不编码、不提交）；
+    /// 真在动的照常每帧画
+    @Test func scriptOnlyScenesSkipFramesThatWouldLookTheSame() async throws {
+        func skipped(_ script: String) async throws -> Int {
+            let vertex = """
+                attribute vec3 a_Position;
+                attribute vec2 a_TexCoord;
+                varying vec2 v_TexCoord;
+                void main() { gl_Position = vec4(a_Position, 1.0); v_TexCoord = a_TexCoord; }
+                """
+            let fragment = "varying vec2 v_TexCoord;\nvoid main() { gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); }"
+            let origin = String(decoding: try JSONSerialization.data(withJSONObject: ["script": script, "value": "32 32 0"]), as: UTF8.self)
+            let files: [String: Data] = [
+                "scene.json": Data("""
+                    {"general": {"orthogonalprojection": {"width": 64, "height": 64}, "clearcolor": "0 0 0"},
+                     "objects": [{"id": 1, "image": "models/solid.json", "origin": \(origin), "size": "16 16"}]}
+                    """.utf8),
+                "models/solid.json": Data(#"{"solidlayer": true, "material": "materials/solid.json"}"#.utf8),
+                "materials/solid.json": Data(#"{"passes": [{"shader": "genericimage2", "textures": []}]}"#.utf8),
+                "shaders/genericimage2.vert": Data(vertex.utf8),
+                "shaders/genericimage2.frag": Data(fragment.utf8),
+            ]
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("StateDriven-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: folder) }
+            try Self.package(files).write(to: folder.appendingPathComponent("scene.pkg"))
+            let content = SceneContent(
+                projectFolder: folder, assets: nil, targetSize: CGSize(width: 128, height: 128), label: "测试",
+                log: EventLog(fileURL: folder.appendingPathComponent("log.txt")), onFailure: { _ in })
+            defer { content.tearDown() }
+            content.view.frame = NSRect(x: 0, y: 0, width: 64, height: 64)
+            for _ in 0..<500 where content.frameRateInUse == nil { try await Task.sleep(for: .milliseconds(10)) }
+            var time = 100.0
+            for _ in 0..<30 {
+                content.advance(to: time)
+                time += 1.0 / 30
+            }
+            return content.skippedFrames
+        }
+        // 提到了 Date（被当成时间相关、每帧都跑），算出来的位置永远一样
+        #expect(try await skipped("export function update(value) { const now = Date.now(); return value; }") >= 28)
+        // 按 engine.runtime 上下浮动：每帧都不一样。只有第一帧不画——场景时间还没走，和装上时画的那帧是同一时刻
+        let moving = try await skipped(
+            "export function update(value) { value.y = 32 + Math.sin(engine.runtime * 3) * 10; return value; }")
+        #expect(moving <= 1, "动着的场景每帧都要画，实际跳过 \(moving) 帧")
+    }
+
     private static func package(_ files: [String: Data]) -> Data {
         var header = Data()
         func u32(_ value: Int) { withUnsafeBytes(of: UInt32(value).littleEndian) { header.append(contentsOf: $0) } }

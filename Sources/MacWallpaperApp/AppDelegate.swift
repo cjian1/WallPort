@@ -756,8 +756,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// 立即换一张（菜单里的"立即换一张"和定时器共用）
     private func rotateWallpapers() {
+        // 扫壁纸库要逐个读几百个 project.json，放到后台，免得每次轮播主线程（菜单、壁纸渲染）卡一下
+        let folders = libraryFolders.folders
+        Task {
+            let projects = await Task.detached(priority: .utility) { LibraryScanner.scan(folders: folders) }.value
+            rotateWallpapers(among: projects)
+        }
+    }
+
+    private func rotateWallpapers(among projects: [WallpaperProject]) {
         guard let controller else { return }
-        let projects = LibraryScanner.scan(folders: libraryFolders.folders)
         guard !projects.isEmpty else {
             log.write("轮播：壁纸库是空的（先在壁纸库里添加文件夹）")
             return
@@ -1297,7 +1305,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func appWindowWillClose(_ notification: Notification) {
         let closing = notification.object as? NSWindow
         // 壁纸库关了：缩略图不再需要，内存还给系统（壁坞常驻后台）
-        if closing === libraryWindow?.window { ThumbnailCache.shared.removeAll() }
+        if closing === libraryWindow?.window {
+            ThumbnailCache.shared.removeAll()
+            workshop.isLibraryOpen = false
+        }
         // 关的这一个之外还有壁坞自己的窗口开着就不动
         let stillOpen = [libraryWindow?.window, welcomeWindow?.window].contains { window in
             guard let window, window !== closing else { return false }
@@ -1397,6 +1408,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             window.model.selectCurrentIfNeeded()
         }
         presentAppWindow(window)
+        // 窗口开着时和 Steam 的连接不因空闲断开（创意工坊页随时要用）
+        workshop.isLibraryOpen = true
     }
 
     /// 壁纸库里的显示器列表："设到"选中的那块拔掉了就换成第一块
