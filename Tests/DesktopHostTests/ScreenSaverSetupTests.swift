@@ -50,6 +50,48 @@ import Testing
         #expect(try version(at: destination) == "2")
     }
 
+    /// 按壁纸存储 `Index.plist` 的样子拼一份：`Idle` 里的 `Configuration` 是又一层二进制 plist
+    private func wallpaperStore(_ entries: [String: [String: Any]]) throws -> Data {
+        var store: [String: Any] = [:]
+        for (key, choice) in entries {
+            var encodedChoice = choice
+            if let configuration = choice["Configuration"] {
+                encodedChoice["Configuration"] = try PropertyListSerialization.data(
+                    fromPropertyList: configuration, format: .binary, options: 0)
+            }
+            store[key] = ["Type": "idle", "Idle": ["Content": ["Choices": [encodedChoice]]]]
+        }
+        return try PropertyListSerialization.data(fromPropertyList: store, format: .binary, options: 0)
+    }
+
+    private func module(_ url: String) -> [String: Any] {
+        ["Provider": "com.apple.wallpaper.choice.screen-saver", "Configuration": ["module": ["relative": url]]]
+    }
+
+    /// 在系统设置里选了壁坞以后存储里是这样（本机 macOS 27 实测，旧的 moduleDict 还是 Ventura）
+    @Test func readsTheSelectedModuleFromTheWallpaperStore() throws {
+        let data = try wallpaperStore([
+            "AllSpacesAndDisplays": module("file:///Users/me/Library/Screen%20Savers/WallPort.saver"),
+            "SystemDefault": module("file:///System/Library/ExtensionKit/Extensions/Ventura.appex"),
+        ])
+        let path = ScreenSaverSetup.idleModulePath(inWallpaperStore: data)
+        #expect(path == "/Users/me/Library/Screen Savers/WallPort.saver")
+        #expect(ScreenSaverSetup.isSelected(modulePath: path))
+    }
+
+    /// 没有对所有屏生效的那项就看系统默认；那项选的不是模块（航拍）就是"没选模块"，不拿系统默认里以前的选择充数；坏文件是 nil
+    @Test func fallsBackOnlyWhenTheTopEntryIsMissing() throws {
+        let onlyDefault = try wallpaperStore(["SystemDefault": module("file:///System/Library/ExtensionKit/Extensions/Ventura.appex")])
+        #expect(ScreenSaverSetup.idleModulePath(inWallpaperStore: onlyDefault) == "/System/Library/ExtensionKit/Extensions/Ventura.appex")
+
+        let aerial = try wallpaperStore([
+            "AllSpacesAndDisplays": ["Provider": "com.apple.wallpaper.choice.aerials", "Configuration": ["assetID": "X"]],
+            "SystemDefault": module("file:///Users/me/Library/Screen%20Savers/WallPort.saver"),
+        ])
+        #expect(ScreenSaverSetup.idleModulePath(inWallpaperStore: aerial) == nil)
+        #expect(ScreenSaverSetup.idleModulePath(inWallpaperStore: Data("不是 plist".utf8)) == nil)
+    }
+
     @Test func recognisesOurModuleByName() {
         #expect(ScreenSaverSetup.isSelected(modulePath: "/Users/me/Library/Screen Savers/WallPort.saver"))
         #expect(!ScreenSaverSetup.isSelected(modulePath: "/System/Library/ExtensionKit/Extensions/Ventura.appex"))
