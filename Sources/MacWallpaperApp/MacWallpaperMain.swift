@@ -43,7 +43,11 @@ extension MacWallpaperMain {
     private static func writeGuide() {
         let hasApp = FileManager.default.fileExists(atPath: AppFolder.root.appendingPathComponent("WallPort.app").path)
         let appLine = hasApp ? String(localized: "WallPort.app     软件本身") + "\n" : ""
-        let text = [
+        // 系统只认 ~/Library/Screen Savers 里的屏保：装了的话，它是统一文件夹之外唯一一样东西
+        let saverLines = FileManager.default.fileExists(atPath: ScreenSaverSetup.installed.path)
+            ? [String(localized: "装了壁坞的屏幕保护程序，它在 ~/Library/Screen Savers/WallPort.saver：先在系统设置里换一个屏保再删。")]
+            : []
+        let text = ([
             hasApp ? String(localized: "壁坞（WallPort）的所有文件都在这个文件夹里。")
                 : String(localized: "壁坞（WallPort）的所有文件都在这个文件夹里（软件本身在「应用程序」里）。"),
             "",
@@ -56,9 +60,10 @@ extension MacWallpaperMain {
             "",
             hasApp ? String(localized: "不用了的话，先退出壁坞，再把整个文件夹移到废纸篓。")
                 : String(localized: "不用了的话，先退出壁坞，再把整个文件夹和「应用程序」里的壁坞移到废纸篓。"),
+        ] + saverLines + [
             String(localized: "macOS 自己还会记一点东西（窗口位置、网页 Cookie 之类），放在系统的位置，删不删都行。"),
             "",
-        ].joined(separator: "\n")
+        ]).joined(separator: "\n")
         // 文件名跟着界面语言；换了语言时把另一种语言的旧说明删掉
         let name = String(localized: "说明.txt")
         for other in ["说明.txt", "Read Me.txt"] where other != name {

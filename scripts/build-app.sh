@@ -8,6 +8,7 @@ cd "$(dirname "$0")/.."
 config="${1:-release}"
 
 swift build -c "$config" --product MacWallpaperApp
+swift build -c "$config" --product WallPortSaver
 bin_dir="$(swift build -c "$config" --show-bin-path)"
 
 # App 名字：壁坞 / WallPort（中文系统显示"壁坞"，见 App/*.lproj/InfoPlist.strings）。
@@ -29,10 +30,16 @@ cp App/AppIcon.icns "$staging/Contents/Resources/AppIcon.icns"
 scripts/make-credits.sh "$staging/Contents/Resources/Credits.html"
 # 隐私政策、使用条款（开发版的发布者、联系方式是"未填写"；正式版由 release.sh 填）
 scripts/fill-legal.sh "$staging/Contents/Resources/Legal"
+# 屏幕保护程序：空闲、锁屏时显示当前画面（菜单里「屏幕保护程序用当前画面…」装到 ~/Library/Screen Savers）
+saver="$staging/Contents/Library/Screen Savers/WallPort.saver"
+mkdir -p "$(dirname "$saver")"
+scripts/make-saver.sh "$bin_dir" "$saver" > /dev/null
 
 # 系统的隐私授权（例如访问"文稿"文件夹）认的是签名身份。临时签名（-）每次构建都会变，
 # 于是每次都要重新授权；有 Apple Development 证书时就用它。也可以用 CODESIGN_IDENTITY 指定。
 identity="${CODESIGN_IDENTITY:-$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/ { print $2; exit }')}"
+# 里面的屏保要先签（签 App 时不会顺带签它）
+codesign --force --sign "${identity:--}" "$saver"
 codesign --force --sign "${identity:--}" "$staging"
 echo "签名身份：${identity:-临时签名（每次构建都要重新授权文件访问）}" >&2
 

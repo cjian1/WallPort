@@ -137,6 +137,15 @@ Nothing. Displays without a wallpaper keep your own desktop picture; you can als
 </details>
 
 <details>
+<summary><b>Why do I see a built-in macOS wallpaper when my Mac is idle or wakes up locked?</b></summary>
+<br>
+
+That is the macOS **screen saver** (by default it starts after 20 minutes of inactivity, and the lock screen sits on top of it). It is set separately from the desktop picture and defaults to an animation of a built-in wallpaper.
+Choose "Use Current Frame as Screen Saver…" in the menu bar menu, then pick "WallPort" under Other in the System Settings window that opens; from then on, idle, lock and wake show the live wallpaper's current frame.
+(macOS only lets you choose the screen saver yourself.)
+</details>
+
+<details>
 <summary><b>Why can't I see Questionable or Mature wallpapers in the Workshop?</b></summary>
 <br>
 
@@ -147,7 +156,8 @@ Browsing the Workshop shows only Everyone-rated items by default; the first time
 <summary><b>How do I uninstall it?</b></summary>
 <br>
 
-Quit WallPort (menu bar icon → Quit — this restores your original desktop picture), then move the `WallPort` folder in your home folder and WallPort in Applications to the Trash. Everything WallPort keeps is in `~/WallPort`.
+Quit WallPort (menu bar icon → Quit — this restores your original desktop picture), then move the `WallPort` folder in your home folder and WallPort in Applications to the Trash. Everything WallPort keeps is in `~/WallPort`;
+if you installed the WallPort screen saver, also remove `~/Library/Screen Savers/WallPort.saver` (pick another screen saver in System Settings first).
 </details>
 
 <details>

@@ -8,6 +8,8 @@ public final class VideoContent: DesktopContent, UserPausable, AudioPlaying {
     public let view: NSView
     public let url: URL
     public var isPausedByUser: Bool { gate.isPausedByUser }
+    /// 视频按当前播放时刻向解码器取帧（`AVAssetImageGenerator`），不看窗口在不在屏幕上
+    public var snapshotsWhileHidden: Bool { true }
 
     private let playerView: PlayerView
     private let player = AVQueuePlayer()

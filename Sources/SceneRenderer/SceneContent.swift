@@ -28,6 +28,8 @@ public final class SceneContent: DesktopContent, UserPausable, AudioPlaying, Fra
 
     public var view: NSView { container }
     public var isPausedByUser: Bool { gate.isPausedByUser }
+    /// 场景是离屏渲染的（`renderImage` 不依赖窗口在不在屏幕上），锁屏 / 睡眠前也能截到当前这一帧
+    public var snapshotsWhileHidden: Bool { true }
 
     private let sceneView = SceneView()
     private lazy var container = SceneContainerView(sceneView: sceneView)

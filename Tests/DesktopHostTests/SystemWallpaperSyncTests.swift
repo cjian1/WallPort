@@ -179,6 +179,38 @@ private final class FakeDesktop: DesktopPictureStore {
         }
     }
 
+    /// 壁坞的屏幕保护程序按 `latestFrame` 找图：找到的是这块屏刚设上去的那张，别的屏、别的文件不算；恢复以后就没有了
+    @Test func latestFrameIsWhatWasJustApplied() throws {
+        try withSync { sync, desktop, _ in
+            #expect(SystemWallpaperSync.latestFrame(forDisplayKey: display.stableKey, in: directory) == nil)
+            sync.apply(makeImage(), to: display)
+            let applied = try #require(desktop.pictures[display.id]).path
+            // 旁边放几张不该被认出来的：另一块屏的、更"新"的非 JPEG、前缀对但后面不是时间戳的
+            for name in [
+                "\(display.stableKey)7-99999999999999.jpg", "\(display.stableKey)-99999999999999.png",
+                "\(display.stableKey)-backup.jpg",
+            ] {
+                FileManager.default.createFile(atPath: directory.appendingPathComponent(name).path, contents: Data())
+            }
+            let found = try #require(SystemWallpaperSync.latestFrame(forDisplayKey: display.stableKey, in: directory))
+            #expect(found.standardizedFileURL.path == URL(fileURLWithPath: applied).standardizedFileURL.path)
+
+            sync.restore(displays: [display])
+            #expect(SystemWallpaperSync.latestFrame(forDisplayKey: display.stableKey, in: directory) == nil)
+        }
+    }
+
+    /// 几张都在时取时间戳最大的（按数值比，不按字符串：位数不同时字符串比会错）
+    @Test func latestFramePicksTheNewestStamp() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for stamp in [999, 1000, 20] {
+            let name = SystemWallpaperSync.frameFileName(displayKey: "ABC", stamp: stamp)
+            FileManager.default.createFile(atPath: directory.appendingPathComponent(name).path, contents: Data())
+        }
+        #expect(SystemWallpaperSync.latestFrame(forDisplayKey: "ABC", in: directory)?.lastPathComponent == "ABC-1000.jpg")
+    }
+
     @Test func restoreWithoutApplyChangesNothing() throws {
         try withSync { sync, desktop, _ in
             sync.restore(displays: [display])

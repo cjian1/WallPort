@@ -51,6 +51,8 @@ public final class WallpaperController: NSObject {
     private static let screenSyncInterval: TimeInterval = 0.25
     private var watchdog: Timer?
     private var snapshotTasks: [CGDirectDisplayID: Task<Void, Never>] = [:]
+    /// 锁屏、屏保启动这两个分布式通知的观察者（block 形式，要自己摘掉）
+    private var distributedObservers: [any NSObjectProtocol] = []
 
     /// 显示器快照的来源。默认读 NSScreen；测试里换成假的，就不必在真实屏幕上建窗口
     var displaySource: @MainActor () -> [DisplaySnapshot] = {
@@ -112,6 +114,22 @@ public final class WallpaperController: NSObject {
         workspace.addObserver(
             self, selector: #selector(sessionDidResignActive),
             name: NSWorkspace.sessionDidResignActiveNotification, object: nil)
+        // 睡眠前按"此刻"的画面重新设一次系统壁纸：睡下去以后动态壁纸就停了，
+        // 而锁屏 / 唤醒时看到的是系统壁纸，不能是启动时同步的那一帧
+        workspace.addObserver(
+            self, selector: #selector(systemWillSleep),
+            name: NSWorkspace.willSleepNotification, object: nil)
+        // 锁屏（不一定跟着睡眠）：系统壁纸就是锁屏上看到的那张。
+        // 屏保启动（空闲 20 分钟之类）：壁坞的屏幕保护程序显示的是同步下来的截图，马上换成此刻的画面，
+        // 屏保那边一秒内会淡入换上（系统自带的屏保不看它，见 SystemWallpaperSync 的说明）。
+        // 分布式通知可能不在主线程上发出来，用主队列的 block 观察者
+        for (name, reason) in [("com.apple.screenIsLocked", "锁屏"), ("com.apple.screensaver.didstart", "屏保启动")] {
+            distributedObservers.append(DistributedNotificationCenter.default().addObserver(
+                forName: NSNotification.Name(name), object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshSystemWallpaper(reason: reason) }
+            })
+        }
         // 切换应用时窗口多半跟着变了：马上重算一次桌面露出来多少，不用等下一次定时检查
         workspace.addObserver(
             self, selector: #selector(applicationDidActivate),
@@ -143,6 +161,8 @@ public final class WallpaperController: NSObject {
         screenSyncScheduled = false
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
+        distributedObservers.forEach(DistributedNotificationCenter.default().removeObserver)
+        distributedObservers = []
         for id in Array(slots.keys) { removeSlot(for: id) }
         displays = []
     }
@@ -153,8 +173,19 @@ public final class WallpaperController: NSObject {
         for slot in slots.values {
             if shown { slot.window.orderFrontRegardless() } else { slot.window.orderOut(nil) }
         }
-        log.write(shown ? "显示壁纸" : "隐藏壁纸")
-        if shown { scheduleProbe("重新显示") }
+        guard shown else {
+            // 系统壁纸同步把当前画面设成了系统壁纸，只把窗口藏起来的话用户看到的还是同一张图。
+            // "隐藏壁纸"要的是露出用户自己的桌面，所以连系统壁纸一起换回原来的
+            log.write("隐藏壁纸")
+            snapshotTasks.values.forEach { $0.cancel() }
+            snapshotTasks = [:]
+            systemWallpaperSync?.restore(displays: displays)
+            return
+        }
+        log.write("显示壁纸")
+        // 隐藏期间系统壁纸换回了原来的，重新显示要按当前画面再设一次
+        for (id, slot) in slots { scheduleSnapshot(for: id, content: slot.content) }
+        scheduleProbe("重新显示")
     }
 
     public func setLevel(_ newLevel: DesktopLevel) {
@@ -386,6 +417,11 @@ public final class WallpaperController: NSObject {
         updateAsleep(reason: "切到别的用户") { sessionInactive = true }
     }
 
+    /// 系统要睡了（`screensDidSleep` 是屏幕已经关了，那时再截就晚了）
+    @objc private func systemWillSleep() {
+        refreshSystemWallpaper(reason: "睡眠前")
+    }
+
     @objc private func applicationDidActivate() {
         updateCoverage()
     }
@@ -463,6 +499,29 @@ public final class WallpaperController: NSObject {
         for (id, slot) in slots { scheduleSnapshot(for: id, content: slot.content, delay: .zero) }
     }
 
+    /// 立刻按**此刻**的画面重新设一次系统壁纸，不等常规那 3 秒。锁屏、睡眠前、屏保启动时用：
+    /// 动态壁纸一直在变，上一次同步的那一帧早就过时了，而锁屏上看到的就是系统壁纸。
+    /// 网页被藏起来时可能截到空白，跳过它、保住上一次设上去的画面
+    public func refreshSystemWallpaper(reason: String) {
+        guard let sync = systemWallpaperSync, isShown else { return }
+        for (id, slot) in slots {
+            let content = slot.content
+            guard !content.isPlaceholder, !content.showsSystemWallpaper,
+                  content.snapshotsWhileHidden || slot.window.occlusionState.contains(.visible)
+            else { continue }
+            snapshotTasks[id]?.cancel()
+            snapshotTasks[id] = Task { [weak self] in
+                guard let image = await content.snapshot() else { return }
+                // 两次刷新挨得很近（屏保启动后接着锁屏）：后一次已经接手了，前一次截好了也不再设，免得连写两张
+                guard !Task.isCancelled, let self, self.slots[id]?.content === content,
+                      let display = self.displays.first(where: { $0.id == id })
+                else { return }
+                sync.apply(image, to: display)
+                self.log.write("系统壁纸：显示器 \(id) 在\(reason)时按当前画面重新设置")
+            }
+        }
+    }
+
     /// 给这块显示器**现在显示**的那份内容排一次截图；内容换掉之后要重新排（见 `finishHandoff`）
     private func scheduleSnapshot(
         for id: CGDirectDisplayID, content: any DesktopContent, delay: Duration = snapshotDelay, attempt: Int = 1
@@ -470,6 +529,8 @@ public final class WallpaperController: NSObject {
         snapshotTasks[id]?.cancel()
         // 占位内容不同步成系统壁纸（它不是用户选的壁纸）
         guard let sync = systemWallpaperSync, !content.isPlaceholder else { return }
+        // 用户点了"隐藏壁纸"：系统壁纸已经换回原来的，不要再设回去
+        guard isShown else { return }
         // 不放动态壁纸：系统壁纸就是桌面上看到的那张，不截图；之前同步过当前画面的，换回用户原来的
         if content.showsSystemWallpaper {
             if let display = displays.first(where: { $0.id == id }) { sync.restore(displays: [display]) }
@@ -485,7 +546,7 @@ public final class WallpaperController: NSObject {
     private func captureSnapshot(for id: CGDirectDisplayID, of content: any DesktopContent, attempt: Int) async {
         guard systemWallpaperSync != nil, let slot = slots[id], slot.content === content else { return }
         // 窗口被藏起来或挡住时，网页可能停止渲染，截到的是旧画面或空白；过一会儿再试
-        guard isShown, slot.window.occlusionState.contains(.visible) else {
+        guard isShown, slot.window.occlusionState.contains(.visible) || content.snapshotsWhileHidden else {
             if attempt < 10 { scheduleSnapshot(for: id, content: content, delay: .seconds(10), attempt: attempt + 1) }
             return
         }

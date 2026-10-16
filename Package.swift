@@ -4,6 +4,12 @@ import PackageDescription
 let package = Package(
     name: "MacWallpaper",
     platforms: [.macOS(.v14)],
+    products: [
+        .executable(name: "MacWallpaperApp", targets: ["MacWallpaperApp"]),
+        .executable(name: "WallpaperTool", targets: ["WallpaperTool"]),
+        // 壁坞的屏幕保护程序：WallPort.saver 里的可执行文件（由 scripts/make-saver.sh 包成 .saver、装进 App）
+        .library(name: "WallPortSaver", type: .dynamic, targets: ["WallPortSaver"]),
+    ],
     targets: [
         // 第三方着色器编译器：源码随项目一起编译（见 Vendor/README.md），不依赖 Homebrew
         .target(
@@ -82,6 +88,8 @@ let package = Package(
         .target(name: "VideoWallpaper", dependencies: ["DesktopHost"]),
         // 网页壁纸：WKWebView 加载项目文件夹，注入与 WE 网页壁纸接口兼容的脚本
         .target(name: "WebWallpaper", dependencies: ["DesktopHost"]),
+        // 屏幕保护程序：空闲、锁屏时显示动态壁纸当前的画面（系统壁纸同步写下的截图）
+        .target(name: "WallPortSaver", dependencies: ["DesktopHost"]),
         // 菜单栏应用外壳
         .executableTarget(
             name: "MacWallpaperApp",
@@ -94,6 +102,7 @@ let package = Package(
                 "SteamProtocol", "WebWallpaper",
             ]),
         .testTarget(name: "DesktopHostTests", dependencies: ["DesktopHost"]),
+        .testTarget(name: "WallPortSaverTests", dependencies: ["WallPortSaver", "DesktopHost"]),
         .testTarget(name: "WallpaperLibraryTests", dependencies: ["WallpaperLibrary", "SteamProtocol"]),
         .testTarget(name: "WebWallpaperTests", dependencies: ["WebWallpaper"]),
         .testTarget(name: "WallpaperFormatsTests", dependencies: ["WallpaperFormats"]),

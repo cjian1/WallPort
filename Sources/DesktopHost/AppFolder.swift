@@ -13,10 +13,21 @@ import Foundation
 ///
 /// 原来散在 `~/Library/Application Support/MacWallpaper`、`~/Library/Preferences`、`~/Library/Logs`、`~/Library/Caches`、
 /// `~/wp-assets` 和 Steam 的创意工坊文件夹里，App 第一次启动时由 `AppFolderMigration`（WallpaperLibrary）挪过来。
-/// macOS 自己还会给每个 App 记一些东西（窗口位置、打开面板上次的位置、网页的 Cookie），放在系统的位置，删了会重建
+/// macOS 自己还会给每个 App 记一些东西（窗口位置、打开面板上次的位置、网页的 Cookie），放在系统的位置，删了会重建。
+/// 唯一的例外是用户装了壁坞的屏幕保护程序：系统只认 `~/Library/Screen Savers` 里的（见 `ScreenSaverSetup`）
 public enum AppFolder {
     public static var root: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("WallPort", isDirectory: true)
+        userHome.appendingPathComponent("WallPort", isDirectory: true)
+    }
+
+    /// 用户真正的主目录。App 里和 `homeDirectoryForCurrentUser` 是同一个（都不看 `$HOME`）；
+    /// 壁坞的屏幕保护程序跑在系统沙盒里的 legacyScreenSaver 进程中，那里 `homeDirectoryForCurrentUser`
+    /// 是它自己的容器，按它拼就找不到统一文件夹
+    public static var userHome: URL {
+        if let entry = getpwuid(getuid()), let directory = entry.pointee.pw_dir {
+            return URL(fileURLWithPath: String(cString: directory), isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
     }
 
     /// 设置文件（`UserDefaults` 按路径开的，所以名字不带 .plist）

@@ -29,6 +29,11 @@ public protocol DesktopContent: AnyObject {
     /// 这块屏幕不放动态壁纸、显示用户原来的系统壁纸（见 `SystemWallpaperContent`）：
     /// 控制器让窗口保持全透明，系统壁纸同步不截图、换回原来的那张
     var showsSystemWallpaper: Bool { get }
+
+    /// 窗口被藏起来（锁屏、屏幕睡眠、用户点了"隐藏壁纸"）时还能不能截到**当前**画面。
+    /// 场景在离屏渲染、视频按时间向解码器取帧，都能；网页被藏起来时可能截到空白，默认不行。
+    /// 锁屏 / 睡眠前要把"此刻"的画面设成系统壁纸，只有能截的内容才做
+    var snapshotsWhileHidden: Bool { get }
 }
 
 extension DesktopContent {
@@ -42,6 +47,9 @@ extension DesktopContent {
     public var isPlaceholder: Bool { false }
 
     public var showsSystemWallpaper: Bool { false }
+
+    /// 默认不行：拿不准就保住上一次设上去的画面，不要拿一张可能是空白的图覆盖系统壁纸
+    public var snapshotsWhileHidden: Bool { false }
 }
 
 /// "不放动态壁纸"：这块屏幕显示用户原来的系统壁纸（壁纸库还是空的、或者用户选了不放）。

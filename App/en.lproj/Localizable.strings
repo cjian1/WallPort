@@ -173,6 +173,30 @@
 "锁屏、调度中心、编辑桌面小组件时系统会露出系统壁纸（需要打开上面的同步）。默认用动态壁纸当前的画面，也可以固定选一张图片——例如让锁屏看照片、桌面继续播动态壁纸。" = "macOS shows the system wallpaper on the lock screen, in Mission Control and while editing widgets (requires the sync option above). By default it uses the live wallpaper’s current frame; you can also pick a fixed image — for example, a photo on the lock screen while the desktop keeps playing the live wallpaper.";
 
 /* AppDelegate.swift */
+"屏幕保护程序用当前画面…" = "Use Current Frame as Screen Saver…";
+
+/* AppDelegate.swift */
+"电脑空闲一段时间后系统会启动屏幕保护程序（默认是系统自带壁纸的动画），锁屏和唤醒时先看到的也是它。装上壁坞的屏幕保护程序、在系统设置里选中「壁坞」，那时显示的就是动态壁纸当前的画面（需要打开上面的同步）。" = "When your Mac has been idle for a while, macOS starts the screen saver (by default an animation of a built-in wallpaper), and that is also what you see behind the lock screen and when waking up. Install the WallPort screen saver and choose “WallPort” in System Settings to show the live wallpaper’s current frame instead (requires the sync option above).";
+
+/* AppDelegate.swift */
+"没能装上壁坞的屏幕保护程序" = "Couldn’t Install the WallPort Screen Saver";
+
+/* AppDelegate.swift */
+"壁坞的屏幕保护程序装好了" = "WallPort Screen Saver Installed";
+
+/* AppDelegate.swift */
+"接下来打开系统设置的「屏幕保护程序」，在「其他」里选「壁坞」。之后电脑空闲、锁屏和唤醒时显示的就是动态壁纸当前的画面，不再是系统自带的壁纸。" = "Next, open Screen Saver in System Settings and choose “WallPort” under Other. From then on, when your Mac is idle, locked or waking up, it shows the live wallpaper’s current frame instead of a built-in wallpaper.";
+
+/* MacWallpaperMain.swift */
+"装了壁坞的屏幕保护程序，它在 ~/Library/Screen Savers/WallPort.saver：先在系统设置里换一个屏保再删。" = "The WallPort screen saver is installed at ~/Library/Screen Savers/WallPort.saver: choose another screen saver in System Settings before deleting it.";
+
+/* AppDelegate.swift */
+"打开系统设置" = "Open System Settings";
+
+/* AppDelegate.swift */
+"稍后" = "Later";
+
+/* AppDelegate.swift */
 "开机自动启动" = "Launch at Login";
 
 /* AppDelegate.swift */

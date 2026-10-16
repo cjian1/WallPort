@@ -1,0 +1,3 @@
+/* Name in the screen saver list on non-Chinese systems */
+CFBundleName = "WallPort";
+CFBundleDisplayName = "WallPort";

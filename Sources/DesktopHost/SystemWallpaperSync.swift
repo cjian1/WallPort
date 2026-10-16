@@ -60,9 +60,13 @@ public final class WorkspaceDesktopPictures: DesktopPictureStore {
 /// 原来的系统壁纸按显示器记在 UserDefaults 里；已经是我们生成的图片时不会被当成原壁纸，
 /// 所以崩溃后再启动也能恢复到真正的原壁纸。
 /// 限制：系统壁纸按空间分别设置时，恢复只作用于当前空间。
+///
+/// 电脑空闲时出现的**屏幕保护程序**不归这里管：系统把它和桌面壁纸分开设置（默认是系统自带壁纸的动画），
+/// 锁屏、唤醒时先看到的也是它。壁坞自己的屏幕保护程序（`WallPortSaver`）显示的就是这里写下的截图
+/// （按 `latestFrame` 找），用户在系统设置里选中它以后，空闲时看到的才是当前画面。
 @MainActor
 public final class SystemWallpaperSync {
-    public static var defaultDirectory: URL { AppFolder.systemWallpaper }
+    public nonisolated static var defaultDirectory: URL { AppFolder.systemWallpaper }
 
     /// 以前放截图的地方：原来的系统壁纸如果记成了那里的截图（崩溃过），也认得出是我们的
     public static var formerDirectories: [URL] {
@@ -111,7 +115,7 @@ public final class SystemWallpaperSync {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             // 文件名每次都不同：系统按路径缓存壁纸，同一路径换了内容可能不会刷新
             let stamp = Int(Date().timeIntervalSince1970 * 1000)
-            let file = directory.appendingPathComponent("\(display.stableKey)-\(stamp).jpg")
+            let file = directory.appendingPathComponent(Self.frameFileName(displayKey: display.stableKey, stamp: stamp))
             try Self.writeJPEG(image, to: file)
             rememberOriginal(of: display)
 
@@ -190,6 +194,26 @@ public final class SystemWallpaperSync {
 
     // MARK: - 文件
 
+    /// 一块显示器的截图叫 `<显示器 UUID>-<毫秒时间戳>.jpg`。壁坞的屏幕保护程序按这个格式找最新的一张（`latestFrame`）
+    nonisolated static func frameFileName(displayKey: String, stamp: Int) -> String {
+        "\(displayKey)-\(stamp).jpg"
+    }
+
+    /// 这块显示器最近一次同步上去的截图。没有就是 nil：没放动态壁纸、关了同步、隐藏或退出时恢复原壁纸并删掉了
+    public nonisolated static func latestFrame(forDisplayKey key: String, in directory: URL = defaultDirectory) -> URL? {
+        let prefix = key + "-"
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        return files
+            .compactMap { file -> (file: URL, stamp: Int)? in
+                let name = file.lastPathComponent
+                guard name.hasPrefix(prefix), name.hasSuffix(".jpg"),
+                      let stamp = Int(name.dropFirst(prefix.count).dropLast(".jpg".count))
+                else { return nil }
+                return (file, stamp)
+            }
+            .max { $0.stamp < $1.stamp }?.file
+    }
+
     private func removeFiles(of display: DisplaySnapshot, except keep: URL?) {
         let prefix = display.stableKey + "-"
         let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
@@ -199,7 +223,7 @@ public final class SystemWallpaperSync {
     }
 
     /// 按屏幕尺寸缩小读入，顺带按 EXIF 方向转正（手机拍的照片常常是横着存的）
-    static func loadImage(_ url: URL, maxPixelSize: Int) -> CGImage? {
+    public nonisolated static func loadImage(_ url: URL, maxPixelSize: Int) -> CGImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,

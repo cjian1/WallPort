@@ -38,7 +38,7 @@ public struct DisplaySnapshot: Equatable, Sendable {
 
 extension DisplaySnapshot {
     @MainActor
-    init?(screen: NSScreen) {
+    public init?(screen: NSScreen) {
         let key = NSDeviceDescriptionKey("NSScreenNumber")
         guard let number = screen.deviceDescription[key] as? NSNumber else { return nil }
         self.init(

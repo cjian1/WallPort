@@ -74,6 +74,7 @@ rm -rf "$out"
 mkdir -p "$out"
 
 swift build -c release --arch arm64 --product MacWallpaperApp
+swift build -c release --arch arm64 --product WallPortSaver
 bin_dir="$(swift build -c release --arch arm64 --show-bin-path)"
 
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
@@ -99,10 +100,15 @@ if [ "$identity" = "-" ] && [ -z "${GITHUB_REPO:-}" ]; then
 else
     scripts/fill-legal.sh "$app/Contents/Resources/Legal" --strict
 fi
+# 屏幕保护程序：空闲、锁屏时显示当前画面（菜单里「屏幕保护程序用当前画面…」装到 ~/Library/Screen Savers）
+saver="$app/Contents/Library/Screen Savers/WallPort.saver"
+mkdir -p "$(dirname "$saver")"
+scripts/make-saver.sh "$bin_dir" "$saver" "$BUNDLE_ID.saver" "$VERSION" "$build" > /dev/null
 
-# 签名：开 Hardened Runtime；有证书时带时间戳（公证要求）
+# 签名：开 Hardened Runtime；有证书时带时间戳（公证要求）。里面的屏保要先签（签 App 时不会顺带签它）
 timestamp=()
 if [ "$identity" != "-" ]; then timestamp=(--timestamp); fi
+codesign --force --options runtime ${timestamp[@]+"${timestamp[@]}"} --sign "$identity" "$saver"
 codesign --force --options runtime ${timestamp[@]+"${timestamp[@]}"} --entitlements App/WallPort.entitlements \
     --sign "$identity" "$app"
 codesign --verify --deep --strict --verbose=2 "$app"

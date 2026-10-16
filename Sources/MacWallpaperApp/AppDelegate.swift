@@ -171,6 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.onDisplaysChanged = { [weak self] in self?.refreshLibraryDisplays() }
         if syncSystemWallpaper { controller.systemWallpaperSync = systemWallpaper }
         applyLockScreenWallpaper()
+        checkScreenSaver()
         setUpStatusItem()
         MainMenu.install(.init(
             target: self, openLibrary: #selector(menuOpenLibrary), addLibraryFolder: #selector(menuAddLibraryFolder),
@@ -508,6 +509,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lockScreenItem.submenu = lockScreenMenu
         lockScreenItem.toolTip = String(localized: "锁屏、调度中心、编辑桌面小组件时系统会露出系统壁纸（需要打开上面的同步）。默认用动态壁纸当前的画面，也可以固定选一张图片——例如让锁屏看照片、桌面继续播动态壁纸。")
         menu.addItem(lockScreenItem)
+        let screenSaver = makeItem(String(localized: "屏幕保护程序用当前画面…"), #selector(setUpScreenSaver))
+        screenSaver.state = ScreenSaverSetup.isSelected() ? .on : .off
+        screenSaver.isEnabled = ScreenSaverSetup.bundled != nil
+        screenSaver.toolTip = String(localized: "电脑空闲一段时间后系统会启动屏幕保护程序（默认是系统自带壁纸的动画），锁屏和唤醒时先看到的也是它。装上壁坞的屏幕保护程序、在系统设置里选中「壁坞」，那时显示的就是动态壁纸当前的画面（需要打开上面的同步）。")
+        menu.addItem(screenSaver)
         let login = makeItem(String(localized: "开机自动启动"), #selector(toggleLoginItem))
         login.state = LoginItem.isEnabled ? .on : .off
         menu.addItem(login)
@@ -1667,6 +1673,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         lockScreenWallpaperPath = url.path
         log.write("锁屏壁纸：\(url.path)")
+    }
+
+    // MARK: - 屏幕保护程序
+
+    /// 启动时：装过壁坞的屏保、App 又更新了的话换成这一版；顺带记下系统现在用的是哪个屏保——
+    /// 空闲时露出系统自带的壁纸，多半是因为屏保不是壁坞的（它和桌面壁纸分开设置）
+    private func checkScreenSaver() {
+        if let bundled = ScreenSaverSetup.bundled {
+            do {
+                if try ScreenSaverSetup.updateIfInstalled(from: bundled) { log.write("屏幕保护程序：换成这一版") }
+            } catch {
+                log.write("屏幕保护程序：更新失败 \(error.localizedDescription)")
+            }
+        }
+        let module = ScreenSaverSetup.selectedModulePath ?? "系统默认"
+        log.write("屏幕保护程序：\(ScreenSaverSetup.isSelected() ? "壁坞的" : "不是壁坞的，空闲时显示的不是当前画面")（\(module)）")
+    }
+
+    /// 菜单里的"屏幕保护程序用当前画面…"：装好壁坞的屏保，打开系统设置让用户选它（系统没有替用户选屏保的公开接口）。
+    /// 已经选了的（菜单上打着勾）直接打开系统设置，想换回别的屏保在那里换
+    @objc private func setUpScreenSaver() {
+        guard let bundled = ScreenSaverSetup.bundled else { return }
+        do {
+            try ScreenSaverSetup.install(from: bundled)
+            log.write("屏幕保护程序：装到 \(ScreenSaverSetup.installed.path)")
+        } catch {
+            log.write("屏幕保护程序：安装失败 \(error.localizedDescription)")
+            let alert = NSAlert()
+            alert.messageText = String(localized: "没能装上壁坞的屏幕保护程序")
+            alert.informativeText = error.localizedDescription
+            NSApp.activate()
+            alert.runModal()
+            return
+        }
+        guard !ScreenSaverSetup.isSelected() else {
+            NSWorkspace.shared.open(ScreenSaverSetup.settingsURL)
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = String(localized: "壁坞的屏幕保护程序装好了")
+        alert.informativeText = String(localized: "接下来打开系统设置的「屏幕保护程序」，在「其他」里选「壁坞」。之后电脑空闲、锁屏和唤醒时显示的就是动态壁纸当前的画面，不再是系统自带的壁纸。")
+        alert.addButton(withTitle: String(localized: "打开系统设置"))
+        alert.addButton(withTitle: String(localized: "稍后"))
+        NSApp.activate()
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        NSWorkspace.shared.open(ScreenSaverSetup.settingsURL)
     }
 
     // MARK: - 壁纸设置
