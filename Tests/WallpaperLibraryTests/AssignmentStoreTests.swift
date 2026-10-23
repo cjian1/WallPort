@@ -63,6 +63,17 @@ import Testing
         #expect(WallpaperSource(storageValue: source.storageValue) == source)
     }
 
+    @Test func imageAssignmentRoundTripsAsAFileURL() {
+        let source = WallpaperSource.project(URL(fileURLWithPath: "/Users/me/Pictures/海边 01.png"))
+        let restored = WallpaperSource(storageValue: source.storageValue)
+        #expect(restored == source)
+        if case .project(let url) = restored {
+            #expect(!url.hasDirectoryPath)
+        } else {
+            Issue.record("图片分配应恢复成 project 来源")
+        }
+    }
+
     /// 没单独设置过的屏幕（刚插上的 HDMI / DP 副屏）沿用主显示器上现在用的那张
     @Test func newDisplayInheritsTheMainDisplaysWallpaper() {
         withStore { store, _ in

@@ -35,7 +35,7 @@ final class LibraryWindowController: NSWindowController {
 @MainActor
 final class LibraryModel: ObservableObject {
     enum Filter: String, CaseIterable, Identifiable {
-        case all = "全部", scene = "场景", video = "视频", web = "网页"
+        case all = "全部", scene = "场景", video = "视频", web = "网页", image = "图片"
         var id: String { rawValue }
 
         var title: String {
@@ -44,6 +44,7 @@ final class LibraryModel: ObservableObject {
             case .scene: String(localized: "场景")
             case .video: String(localized: "视频")
             case .web: String(localized: "网页")
+            case .image: String(localized: "图片")
             }
         }
 
@@ -53,6 +54,7 @@ final class LibraryModel: ObservableObject {
             case .scene: .scene
             case .video: .video
             case .web: .web
+            case .image: .image
             }
         }
     }
@@ -318,9 +320,9 @@ final class LibraryModel: ObservableObject {
         let count = { (kind: WallpaperProject.Kind) in self.projects.filter { $0.kind == kind }.count }
         var parts = [
             String(localized: "场景 \(count(.scene))"), String(localized: "视频 \(count(.video))"),
-            String(localized: "网页 \(count(.web))"),
+            String(localized: "网页 \(count(.web))"), String(localized: "图片 \(count(.image))"),
         ]
-        let others = projects.count - count(.scene) - count(.video) - count(.web)
+        let others = projects.count - count(.scene) - count(.video) - count(.web) - count(.image)
         if others > 0 { parts.append(String(localized: "其它 \(others)")) }
         return String(localized: "共 \(projects.count) 个：\(parts.joined(separator: " · "))")
     }
@@ -351,12 +353,12 @@ final class LibraryModel: ObservableObject {
 
     /// macOS 上放不了的类型（应用程序类、认不出来的）
     func isSupported(_ project: WallpaperProject) -> Bool {
-        project.kind == .scene || project.kind == .video || project.kind == .web
+        project.kind == .scene || project.kind == .video || project.kind == .web || project.kind == .image
     }
 
-    /// 设置能生效的类型：场景按属性重建，网页走 applyUserProperties；视频的属性暂时用不上
+    /// 设置能生效的类型：场景按属性重建，网页走 applyUserProperties；视频和图片有显示方式
     func supportsSettings(_ project: WallpaperProject) -> Bool {
-        project.kind == .scene || project.kind == .web || project.kind == .video
+        project.kind == .scene || project.kind == .web || project.kind == .video || project.kind == .image
     }
 
     /// 这个壁纸有没有声音（决定设置栏里显不显示"声音"一节）
@@ -379,6 +381,8 @@ final class LibraryModel: ObservableObject {
                 self.audioVersion += 1
             }
             return false
+        case .image:
+            return false
         case .application, .unknown:
             return false
         }
@@ -386,7 +390,7 @@ final class LibraryModel: ObservableObject {
 
     /// 铺满当前选中的屏幕时会裁掉多少（场景按画布、视频按画面尺寸）；比例差不多（2% 以内）或者不适用时为 nil
     func crop(for project: WallpaperProject) -> Crop? {
-        guard project.kind == .scene || project.kind == .video,
+        guard project.kind == .scene || project.kind == .video || project.kind == .image,
               let details = details[project.folder.path], !details.isDynamic,
               let width = details.width, let height = details.height, width > 0, height > 0
         else { return nil }
@@ -455,7 +459,7 @@ final class LibraryModel: ObservableObject {
 
     func addFolder() {
         let panel = NSOpenPanel()
-        panel.message = String(localized: "选择放壁纸项目的文件夹（里面每个子文件夹是一个含 project.json 的项目）")
+        panel.message = String(localized: "选择放壁纸的文件夹（子文件夹可以是项目，文件夹里的 PNG / JPEG 图片也会显示）")
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         NSApp.activate()
@@ -856,6 +860,7 @@ struct LibraryCard: View {
         case .scene: return String(localized: "场景")
         case .video: return String(localized: "视频")
         case .web: return String(localized: "网页")
+        case .image: return String(localized: "图片")
         case .application: return String(localized: "应用（不支持）")
         case .unknown: return String(localized: "未知类型")
         }
@@ -866,6 +871,7 @@ struct LibraryCard: View {
         case .scene: return "square.stack.3d.up"
         case .video: return "film"
         case .web: return "globe"
+        case .image: return "photo"
         default: return "questionmark.square"
         }
     }

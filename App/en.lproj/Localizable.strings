@@ -104,7 +104,7 @@
 "轮播" = "Rotation";
 
 /* AppDelegate.swift */
-"按时间自动换壁纸：只换当前用着项目壁纸的显示器，候选是壁纸库里的场景、视频和网页。" = "Changes wallpapers on a schedule. Only displays currently showing a project wallpaper are changed; candidates are the scenes, videos and web wallpapers in the Library.";
+"按时间自动换壁纸：只换当前用着项目壁纸的显示器，候选是壁纸库里的场景、视频、网页和图片。" = "Changes wallpapers on a schedule. Only displays currently showing a project wallpaper are changed; candidates are the scenes, videos, web wallpapers and images in the Library.";
 
 /* AppDelegate.swift */
 "全部继续" = "Resume All";
@@ -277,6 +277,7 @@
 
 /* AppDelegate.swift */
 "整个项目文件夹会移到废纸篓，需要时可以从废纸篓放回原处。" = "The whole project folder will be moved to the Trash. You can put it back from the Trash if needed.";
+"这个图片文件会移到废纸篓，需要时可以从废纸篓放回原处。" = "This image file will be moved to the Trash. You can put it back from the Trash if needed.";
 
 /* AppDelegate.swift */
 "它正在 %lld 块显示器上用作壁纸，删除后这些显示器换成壁纸库里的下一张。" = "It’s the wallpaper on %lld displays; they’ll switch to the next wallpaper in the Library.";
@@ -384,7 +385,7 @@
 "没能导出诊断信息" = "Couldn’t export diagnostics";
 
 /* AppDelegate.swift */
-"选择放着壁纸项目的文件夹（里面每个子文件夹是一个壁纸项目）" = "Choose a folder of wallpaper projects (each subfolder is one project)";
+"选择放着壁纸的文件夹（支持壁纸项目子文件夹和直接放入的 PNG / JPEG 图片）" = "Choose a folder of wallpapers (project subfolders and PNG / JPEG images placed directly in the folder are supported)";
 
 /* AppDelegate.swift */
 "project.json 没有写入口文件" = "project.json doesn’t specify an entry file";
@@ -480,7 +481,7 @@
 "共 %lld 个：%@" = "%lld total: %@";
 
 /* LibraryWindow.swift */
-"选择放壁纸项目的文件夹（里面每个子文件夹是一个含 project.json 的项目）" = "Choose a folder of wallpaper projects (each subfolder is a project with a project.json)";
+"选择放壁纸的文件夹（子文件夹可以是项目，文件夹里的 PNG / JPEG 图片也会显示）" = "Choose a folder of wallpapers (subfolders can contain projects, and PNG / JPEG images in the folder are also shown)";
 
 /* LibraryWindow.swift */
 "（当前）" = " (Current)";
@@ -1262,6 +1263,10 @@
 
 /* UserProperty.swift */
 "图片" = "Image";
+"图片 %lld" = "Images %lld";
+"图片文件不存在" = "The image file doesn’t exist";
+"无法显示 %@：%@" = "Can’t display %@: %@";
+"无法解码这个图片文件" = "This image file can’t be decoded";
 
 /* WallpaperCategories.swift */
 "大众级(G)" = "Everyone (G)";

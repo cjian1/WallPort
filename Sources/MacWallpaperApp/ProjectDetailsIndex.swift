@@ -1,6 +1,7 @@
 import AVFoundation
 import DesktopHost
 import Foundation
+import ImageIO
 import WallpaperFormats
 import WallpaperLibrary
 
@@ -62,8 +63,11 @@ actor ProjectDetailsIndex {
     }
 
     private static func stamp(_ project: WallpaperProject) -> Date {
+        let path = project.kind == .image
+            ? project.folder.path
+            : project.folder.appendingPathComponent("project.json").path
         let attributes = try? FileManager.default.attributesOfItem(
-            atPath: project.folder.appendingPathComponent("project.json").path)
+            atPath: path)
         return attributes?[.modificationDate] as? Date ?? .distantPast
     }
 
@@ -87,6 +91,11 @@ actor ProjectDetailsIndex {
             }
         case .video:
             if let entry = project.entry, let size = await videoSize(entry) {
+                width = size.width
+                height = size.height
+            }
+        case .image:
+            if let entry = project.entry, let size = imageSize(entry) {
                 width = size.width
                 height = size.height
             }
@@ -129,7 +138,20 @@ actor ProjectDetailsIndex {
         return (Int(abs(rect.width).rounded()), Int(abs(rect.height).rounded()))
     }
 
+    static func imageSize(_ url: URL) -> (width: Int, height: Int)? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+              let height = properties[kCGImagePropertyPixelHeight] as? NSNumber
+        else { return nil }
+        return (width.intValue, height.intValue)
+    }
+
     static func folderSize(_ folder: URL) -> Int64 {
+        if let values = try? folder.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+           values.isRegularFile == true {
+            return Int64(values.fileSize ?? 0)
+        }
         guard let enumerator = FileManager.default.enumerator(
             at: folder, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey])
         else { return 0 }

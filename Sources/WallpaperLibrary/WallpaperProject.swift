@@ -1,9 +1,9 @@
 import Foundation
 
-/// Wallpaper Engine 项目文件夹里 project.json 的元数据。只解析展示和播放要用的字段，其余忽略。
+/// 一张本机壁纸：Wallpaper Engine 项目文件夹里的 project.json，或者壁纸库根目录里直接放的图片。
 public struct WallpaperProject: Equatable, Sendable {
     public enum Kind: String, Sendable, Codable {
-        case scene, video, web, application, unknown
+        case scene, video, web, image, application, unknown
     }
 
     public enum LoadError: Error, LocalizedError, Equatable {
@@ -20,6 +20,7 @@ public struct WallpaperProject: Equatable, Sendable {
         }
     }
 
+    /// 项目文件夹；散落图片没有项目文件夹，这里就是图片文件本身
     public let folder: URL
     public let title: String
     public let kind: Kind
@@ -36,10 +37,33 @@ public struct WallpaperProject: Equatable, Sendable {
     public let tags: [String]
 
     public init(folder: URL) throws {
+        if Self.isImageFile(folder) {
+            self.init(imageFile: folder)
+            return
+        }
         guard let data = try? Data(contentsOf: folder.appendingPathComponent("project.json")) else {
             throw LoadError.missingProjectFile
         }
         try self.init(folder: folder, projectJSON: data)
+    }
+
+    /// 壁纸库根目录里直接放的 PNG / JPEG。标题用文件名，预览和入口都是这张图。
+    public init(imageFile: URL) {
+        let file = imageFile.standardizedFileURL
+        self.folder = file
+        title = file.deletingPathExtension().lastPathComponent
+        kind = .image
+        entry = file
+        preview = file
+        userProperties = nil
+        supportsAudio = false
+        rating = nil
+        tags = []
+    }
+
+    /// 目前直接支持常见的 PNG / JPEG 图片；文件夹型项目是否有效仍由 project.json 判断。
+    public static func isImageFile(_ url: URL) -> Bool {
+        ["png", "jpg", "jpeg"].contains(url.pathExtension.lowercased())
     }
 
     public init(folder: URL, projectJSON: Data) throws {
@@ -69,6 +93,7 @@ public struct WallpaperProject: Equatable, Sendable {
         switch entry.map({ ($0 as NSString).pathExtension.lowercased() }) {
         case "html", "htm": return .web
         case "mp4", "m4v", "mov", "webm", "avi", "wmv", "mkv": return .video
+        case "png", "jpg", "jpeg": return .image
         case "json", "pkg": return .scene
         case "exe": return .application
         default: return .unknown

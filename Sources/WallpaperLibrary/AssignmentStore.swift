@@ -7,7 +7,7 @@ public enum WallpaperSource: Equatable, Sendable {
     case systemWallpaper
     /// 单独的视频文件
     case video(URL)
-    /// 含 project.json 的 Wallpaper Engine 项目文件夹
+    /// Wallpaper Engine 项目文件夹，或壁纸库里直接选中、没有 project.json 的图片文件
     case project(URL)
 
     /// 存进 UserDefaults 的字符串形式，方便用 `defaults read local.macwallpaper` 直接查看和修改
@@ -26,7 +26,8 @@ public enum WallpaperSource: Equatable, Sendable {
         } else if let path = Self.path(in: storageValue, after: Self.videoPrefix) {
             self = .video(URL(fileURLWithPath: path))
         } else if let path = Self.path(in: storageValue, after: Self.projectPrefix) {
-            self = .project(URL(fileURLWithPath: path, isDirectory: true))
+            let url = URL(fileURLWithPath: path)
+            self = .project(URL(fileURLWithPath: path, isDirectory: !WallpaperProject.isImageFile(url)))
         } else {
             return nil
         }

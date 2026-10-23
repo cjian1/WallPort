@@ -249,7 +249,7 @@ func scanProjects(in directory: String, assets: URL?) -> Int32 {
                 failures += 1
                 print("    ✗ \(error.localizedDescription)")
             }
-        case .application, .unknown:
+        case .image, .application, .unknown:
             break
         }
     }

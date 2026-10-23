@@ -1,10 +1,10 @@
 import DesktopHost
 import Foundation
 
-/// 壁纸库：扫描用户指定的文件夹，把里面的 WE 项目（含 project.json 的子文件夹）都列出来。
+/// 壁纸库：扫描用户指定的文件夹，把里面的 WE 项目和直接放的 PNG / JPEG 图片都列出来。
 ///
 /// 只看文件夹的直接子文件夹（WE 的创意工坊目录、用户从 Windows 拷来的 ~/wp 都是"一个项目一个文件夹"），
-/// 文件夹本身就是项目时也算。读不了的项目跳过，不影响其它项目。
+/// 也看直接放在文件夹里的图片；文件夹本身就是项目时也算。读不了的项目跳过，不影响其它项目。
 public enum LibraryScanner {
     public static func scan(folders: [URL]) -> [WallpaperProject] {
         var seen = Set<String>()
@@ -12,15 +12,26 @@ public enum LibraryScanner {
         for folder in folders {
             var candidates = [folder]
             if let children = try? FileManager.default.contentsOfDirectory(
-                at: folder, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
-                candidates += children.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+                at: folder, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey], options: [.skipsHiddenFiles]) {
+                candidates += children.filter { child in
+                    let values = try? child.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
+                    return values?.isDirectory == true || values?.isRegularFile == true
+                }
             }
             for candidate in candidates {
                 let key = candidate.standardizedFileURL.path
-                guard !seen.contains(key),
-                      FileManager.default.fileExists(atPath: candidate.appendingPathComponent("project.json").path),
-                      let project = try? WallpaperProject(folder: candidate)
-                else { continue }
+                guard !seen.contains(key) else { continue }
+                let project: WallpaperProject?
+                if WallpaperProject.isImageFile(candidate) {
+                    let values = try? candidate.resourceValues(forKeys: [.isRegularFileKey])
+                    project = values?.isRegularFile == true ? WallpaperProject(imageFile: candidate) : nil
+                } else if FileManager.default.fileExists(
+                    atPath: candidate.appendingPathComponent("project.json").path) {
+                    project = try? WallpaperProject(folder: candidate)
+                } else {
+                    project = nil
+                }
+                guard let project else { continue }
                 seen.insert(key)
                 projects.append(project)
             }

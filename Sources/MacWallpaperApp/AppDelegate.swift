@@ -19,6 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var pausedDisplays: Set<CGDirectDisplayID> = []
     /// 运行中播放失败的视频和原因。重新选择这个文件时清除
     private var failedVideos: [URL: String] = [:]
+    /// 运行中载入失败的图片和原因。重新选择这张图时清除
+    private var failedImages: [URL: String] = [:]
     /// 运行中载入失败的场景（按项目文件夹）和原因。重新选择这个项目或换素材目录时清除
     private var failedScenes: [String: String] = [:]
     /// 载入场景前记一笔、平稳跑过一阵再擦掉：壁坞在这期间崩了的话，下次启动先不载入那张（见 CrashGuard）
@@ -356,6 +358,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             apply(options, to: scene)
             applyPerformanceSettings(to: scene)
             return scene
+        case .image:
+            if let reason = failedImages[entry] {
+                return makeTestPattern(for: display, notice: String(localized: "无法显示 \(entry.lastPathComponent)：\(reason)"))
+            }
+            let options = optionsStore.options(for: project.folder)
+            let image = ImageContent(
+                url: entry, label: "显示器 \(display.id)", log: log, targetPixelSize: display.pixelSize
+            ) { [weak self] reason in
+                self?.failedImages[entry] = reason
+                Task { [weak self] in self?.controller?.reloadContent(for: display.id) }
+            }
+            image.setDisplay(fitsWhole: options.fitsWhole, position: Float(options.clampedPosition))
+            return image
         case .application:
             return makeTestPattern(for: display, notice: String(localized: "「\(project.title)」是应用程序类壁纸，macOS 上无法运行"))
         case .unknown:
@@ -447,7 +462,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         playlistMenu.addItem(makeItem(String(localized: "立即换一张"), #selector(rotateNow)))
         let playlistItem = NSMenuItem(title: String(localized: "轮播"), action: nil, keyEquivalent: "")
         playlistItem.submenu = playlistMenu
-        playlistItem.toolTip = String(localized: "按时间自动换壁纸：只换当前用着项目壁纸的显示器，候选是壁纸库里的场景、视频和网页。")
+        playlistItem.toolTip = String(localized: "按时间自动换壁纸：只换当前用着项目壁纸的显示器，候选是壁纸库里的场景、视频、网页和图片。")
         menu.addItem(playlistItem)
 
         menu.addItem(makeItem(isGloballyPaused ? String(localized: "全部继续") : String(localized: "全部暂停"), #selector(toggleGlobalPause)))
@@ -696,6 +711,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return
             }
             if let entry = project.entry { failedVideos[entry] = nil }
+            if let entry = project.entry, project.kind == .image { failedImages[entry] = nil }
             failedScenes[Self.key(project.folder)] = nil
             projects[Self.key(project.folder)] = .success(project)
             assignments.setSource(.project(project.folder), forDisplay: display.stableKey)
@@ -819,7 +835,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func confirmDelete(_ project: WallpaperProject) {
         let alert = NSAlert()
         alert.messageText = String(localized: "把「\(project.title)」移到废纸篓？")
-        var lines = [String(localized: "整个项目文件夹会移到废纸篓，需要时可以从废纸篓放回原处。")]
+        var lines = [
+            project.kind == .image
+                ? String(localized: "这个图片文件会移到废纸篓，需要时可以从废纸篓放回原处。")
+                : String(localized: "整个项目文件夹会移到废纸篓，需要时可以从废纸篓放回原处。"),
+        ]
         let users = displays(showing: project)
         if !users.isEmpty {
             lines.append(String(localized: "它正在 \(users.count) 块显示器上用作壁纸，删除后这些显示器换成壁纸库里的下一张。"))
@@ -1446,7 +1466,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 引导窗口里的"添加壁纸文件夹"
     private func addLibraryFolder() {
         let panel = NSOpenPanel()
-        panel.message = String(localized: "选择放着壁纸项目的文件夹（里面每个子文件夹是一个壁纸项目）")
+        panel.message = String(localized: "选择放着壁纸的文件夹（支持壁纸项目子文件夹和直接放入的 PNG / JPEG 图片）")
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = true
@@ -1640,6 +1660,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .video: return await VideoContent.unplayableReason(for: entry)
         case .web: return FileManager.default.fileExists(atPath: entry.path) ? nil : String(localized: "入口页面不存在")
         case .scene: return nil
+        case .image: return FileManager.default.fileExists(atPath: entry.path) ? nil : String(localized: "图片文件不存在")
         case .application: return String(localized: "应用程序类壁纸在 macOS 上无法运行")
         case .unknown: return String(localized: "认不出项目类型")
         }

@@ -53,7 +53,7 @@ public final class PlaylistStore: @unchecked Sendable {
 public enum PlaylistPicker {
     /// 能作为壁纸播放的项目
     public static func playable(_ projects: [WallpaperProject]) -> [WallpaperProject] {
-        projects.filter { [.scene, .video, .web].contains($0.kind) && $0.entry != nil }
+        projects.filter { [.scene, .video, .web, .image].contains($0.kind) && $0.entry != nil }
     }
 
     /// - Parameters:

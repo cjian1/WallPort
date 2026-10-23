@@ -29,6 +29,21 @@ import Testing
         #expect(LibraryScanner.scan(folders: [root.appendingPathComponent("a")]).map(\.title) == ["甲 壁纸"])
     }
 
+    @Test func scansLooseImagesAsWallpapers() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("LibraryScannerTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data("png".utf8).write(to: root.appendingPathComponent("海边.PNG"))
+        try Data("jpg".utf8).write(to: root.appendingPathComponent("森林.jpg"))
+
+        let projects = LibraryScanner.scan(folders: [root])
+        #expect(Set(projects.map(\.title)) == ["海边", "森林"])
+        #expect(projects.allSatisfy { $0.kind == .image })
+        #expect(projects.first { $0.title == "海边" }?.entry?.lastPathComponent == "海边.PNG")
+        #expect(projects.first { $0.title == "海边" }?.preview?.lastPathComponent == "海边.PNG")
+    }
+
     @Test func foldersArePersistedWithAFallback() throws {
         let defaults = try #require(UserDefaults(suiteName: "LibraryScannerTests-\(UUID().uuidString)"))
         let fallback = FileManager.default.temporaryDirectory

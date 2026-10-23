@@ -6,7 +6,7 @@
 
 **在 Mac 上播放 Wallpaper Engine 的动态壁纸**
 
-场景 · 视频 · 网页 &nbsp;｜&nbsp; Apple 芯片原生 &nbsp;｜&nbsp; 免费开源
+场景 · 视频 · 网页 · 图片 &nbsp;｜&nbsp; Apple 芯片原生 &nbsp;｜&nbsp; 免费开源
 
 <a href="../../releases/latest"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD%E5%A3%81%E5%9D%9E-%E5%85%8D%E8%B4%B9%E5%BC%80%E6%BA%90-0ea5e9?style=for-the-badge&logo=apple&logoColor=white" height="40" alt="下载壁坞"></a>
 
@@ -32,8 +32,8 @@
 <tr>
 <td width="50%" valign="top">
 
-**🖼️ 三类壁纸都能放**<br>
-场景壁纸的图层、特效、粒子、木偶动画、文字和时钟、脚本、声音，以及视频、网页壁纸。WE 的着色器在运行时翻译成 Metal。
+**🖼️ 常见壁纸都能放**<br>
+场景壁纸的图层、特效、粒子、木偶动画、文字和时钟、脚本、声音，以及视频、网页和 PNG / JPEG 图片。WE 的着色器在运行时翻译成 Metal。
 
 </td>
 <td width="50%" valign="top">

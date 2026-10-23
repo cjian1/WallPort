@@ -56,9 +56,10 @@ private func project(_ folder: String, kind: String = "scene", file: String? = "
             try project("noentry", kind: "scene", file: nil),
             try project("video", kind: "video", file: "loop.mp4"),
             try project("web", kind: "web", file: "index.html"),
+            try project("image", kind: "image", file: "photo.png"),
         ]
         let playable = PlaylistPicker.playable(projects).map(\.title)
-        #expect(playable == ["video", "web"])
+        #expect(playable == ["video", "web", "image"])
 
         var generator = SystemRandomNumberGenerator()
         let next = try #require(PlaylistPicker.next(from: projects, current: nil, isRandom: false, using: &generator))
