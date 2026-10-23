@@ -12,8 +12,9 @@ enum PublisherInfo {
     static func url(of document: Document) -> URL? {
         let candidates = [
             Bundle.main.resourceURL?.appendingPathComponent("Legal/\(document.rawValue).html"),
-            URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-                .deletingLastPathComponent().appendingPathComponent("App/Legal/\(document.rawValue).html"),
+            // 开发时从仓库根目录启动；不要用 #filePath，否则发布二进制会嵌入本机源码路径。
+            URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+                .appendingPathComponent("App/Legal/\(document.rawValue).html"),
         ]
         return candidates.compactMap { $0 }.first { FileManager.default.fileExists(atPath: $0.path) }
     }

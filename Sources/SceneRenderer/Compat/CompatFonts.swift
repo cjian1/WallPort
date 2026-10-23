@@ -34,8 +34,8 @@ enum CompatFonts {
     static let directory: URL? = {
         let candidates = [
             Bundle.main.resourceURL?.appendingPathComponent("CompatFonts", isDirectory: true),
-            URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-                .deletingLastPathComponent().deletingLastPathComponent()
+            // 开发工具和测试从仓库根目录运行；发布包只用上面的 Resources，不把本机路径写进二进制。
+            URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
                 .appendingPathComponent("App/CompatFonts", isDirectory: true),
         ]
         return candidates.compactMap { $0 }.first { FileManager.default.fileExists(atPath: $0.path) }
