@@ -105,6 +105,10 @@ saver="$app/Contents/Library/Screen Savers/WallPort.saver"
 mkdir -p "$(dirname "$saver")"
 scripts/make-saver.sh "$bin_dir" "$saver" "$BUNDLE_ID.saver" "$VERSION" "$build" > /dev/null
 
+# SwiftPM 的 Release 二进制仍会带本地编译的 object / swiftmodule 路径。剥掉局部符号表字串，
+# 发布包只留正式的 Bundle ID、资源与运行逻辑；签名放在剥离之后。
+strip -x "$app/Contents/MacOS/WallPort" "$saver/Contents/MacOS/WallPort"
+
 # 签名：开 Hardened Runtime；有证书时带时间戳（公证要求）。里面的屏保要先签（签 App 时不会顺带签它）
 timestamp=()
 if [ "$identity" != "-" ]; then timestamp=(--timestamp); fi
