@@ -397,6 +397,8 @@ public enum SteamServiceCall {
 public struct PublishedFileInfo: Sendable {
     public let id: UInt64
     public let result: UInt32
+    /// 创建者 SteamID（字段 3）
+    public let creatorID: UInt64?
     public let title: String
     public let fileSize: UInt64
     /// 预览图地址（字段 11）
@@ -416,6 +418,8 @@ public struct PublishedFileInfo: Sendable {
         guard let id = message.varint(2) else { return nil }   // publishedfileid
         self.id = id
         result = UInt32(truncatingIfNeeded: message.varint(1) ?? 0)   // result
+        let creator = message.fixed64(3) ?? 0
+        creatorID = creator == 0 ? nil : creator
         title = message.string(16) ?? ""                              // title
         fileSize = message.varint(8) ?? 0                             // file_size
         previewURL = message.string(11)                               // preview_url

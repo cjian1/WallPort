@@ -36,7 +36,8 @@ public enum LibraryScanner {
                 projects.append(project)
             }
         }
-        return projects.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        return WallpaperProject.resolvingDependencies(in: projects)
+            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
     }
 }
 

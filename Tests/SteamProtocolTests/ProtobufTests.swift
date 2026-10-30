@@ -202,6 +202,7 @@ import Testing
         var item = ProtoWriter()
         item.field(1, varint: 1)                       // result = OK
         item.field(2, varint: 3807008481)              // publishedfileid
+        item.field(3, fixed64: 76_561_199_453_602_723) // creator
         item.field(8, varint: 94_680_570)              // file_size
         item.field(14, fixed64: 6_176_428_963_886_766_760)  // hcontent_file
         item.field(16, string: "Ronova - Face Check")  // title
@@ -211,6 +212,7 @@ import Testing
         let info = try #require(PublishedFileInfo(try ProtoMessage(item.bytes)))
         #expect(info.id == 3807008481)
         #expect(info.result == 1)
+        #expect(info.creatorID == 76_561_199_453_602_723)
         #expect(info.title == "Ronova - Face Check")
         #expect(info.fileSize == 94_680_570)
         #expect(info.contentHandle == 6_176_428_963_886_766_760)

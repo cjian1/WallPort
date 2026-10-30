@@ -60,7 +60,8 @@ extension WorkshopItem {
                 ? Date(timeIntervalSince1970: TimeInterval(details.timeUpdated)) : nil,
             tags: details.tags,
             subscribedAt: details.timeSubscribed > 0
-                ? Date(timeIntervalSince1970: TimeInterval(details.timeSubscribed)) : nil)
+                ? Date(timeIntervalSince1970: TimeInterval(details.timeSubscribed)) : nil,
+            creatorID: details.creatorID.map(String.init))
     }
 }
 

@@ -36,10 +36,12 @@ public struct WorkshopItem: Identifiable, Hashable, Sendable, Codable {
     public let tags: [String]
     /// 当前账号订阅它的时间（只有"我的订阅"列表里有）
     public var subscribedAt: Date?
+    /// 作者 SteamID；旧缓存里没有这个字段时为 nil
+    public let creatorID: String?
 
     public init(
         id: String, title: String, previewURL: URL?, subscriptions: Int, favorited: Int, fileSize: Int64, updated: Date?,
-        tags: [String], subscribedAt: Date? = nil
+        tags: [String], subscribedAt: Date? = nil, creatorID: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -50,6 +52,7 @@ public struct WorkshopItem: Identifiable, Hashable, Sendable, Codable {
         self.updated = updated
         self.tags = tags
         self.subscribedAt = subscribedAt
+        self.creatorID = creatorID
     }
 
     /// 类型标签：Scene / Video / Web / Application
@@ -60,6 +63,20 @@ public struct WorkshopItem: Identifiable, Hashable, Sendable, Codable {
     public var resolution: WallpaperResolution { WallpaperResolution(workshopTags: tags) }
     /// 应用程序类壁纸在 macOS 上放不了
     public var isPlayableOnMac: Bool { kind != "Application" }
+}
+
+public struct WorkshopAuthor: Identifiable, Equatable, Sendable {
+    public let steamID: String
+    public let name: String
+    public let profileURL: URL
+
+    public var id: String { steamID }
+
+    public init(steamID: String, name: String, profileURL: URL) {
+        self.steamID = steamID
+        self.name = name
+        self.profileURL = profileURL
+    }
 }
 
 /// 浏览创意工坊的条件
@@ -245,6 +262,44 @@ public struct WorkshopCatalog: Sendable {
         return try Self.parseDetails(data, order: valid)
     }
 
+    /// 公开资料 XML：不需要 Steam API key。资料没有公开昵称时用 SteamID。
+    public func author(_ steamID: String) async throws -> WorkshopAuthor {
+        guard let numericID = UInt64(steamID) else {
+            throw WorkshopError(String(localized: "作者编号不对"))
+        }
+        let profileURL = URL(string: "https://steamcommunity.com/profiles/\(numericID)/")!
+        var components = URLComponents(url: profileURL, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "xml", value: "1")]
+        var request = URLRequest(url: components.url!)
+        request.setValue("zh-CN,zh;q=0.9,en;q=0.8", forHTTPHeaderField: "Accept-Language")
+        let (data, response) = try await http.data(for: request)
+        try Self.check(response)
+        let name = PublicProfileXML.parse(data) ?? steamID
+        return WorkshopAuthor(steamID: steamID, name: name, profileURL: profileURL)
+    }
+
+    /// 作者公开作品页：一页通常 30 条，空页表示结束；条目详情复用 `details`。
+    public func authorWorks(
+        _ steamID: String, page: Int
+    ) async throws -> (items: [WorkshopItem], reachedEnd: Bool) {
+        guard let numericID = UInt64(steamID) else {
+            throw WorkshopError(String(localized: "作者编号不对"))
+        }
+        var components = URLComponents(
+            string: "https://steamcommunity.com/profiles/\(numericID)/myworkshopfiles/")!
+        components.queryItems = [
+            URLQueryItem(name: "appid", value: Workshop.appID),
+            URLQueryItem(name: "p", value: String(max(1, page))),
+        ]
+        var request = URLRequest(url: components.url!)
+        request.setValue("zh-CN,zh;q=0.9,en;q=0.8", forHTTPHeaderField: "Accept-Language")
+        let (data, response) = try await http.data(for: request)
+        try Self.check(response)
+        let ids = Self.itemIDs(inBrowsePage: String(decoding: data, as: UTF8.self))
+        guard !ids.isEmpty else { return ([], true) }
+        return (try await details(ids), false)
+    }
+
     static func parseDetails(_ data: Data, order: [String]) throws -> [WorkshopItem] {
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let files = (root["response"] as? [String: Any])?["publishedfiledetails"] as? [[String: Any]]
@@ -263,7 +318,8 @@ public struct WorkshopCatalog: Sendable {
                 previewURL: (file["preview_url"] as? String).flatMap(URL.init(string:)),
                 subscriptions: Int(number("subscriptions")), favorited: Int(number("favorited")),
                 fileSize: number("file_size"), updated: updated > 0 ? Date(timeIntervalSince1970: TimeInterval(updated)) : nil,
-                tags: (file["tags"] as? [[String: Any]] ?? []).compactMap { $0["tag"] as? String })
+                tags: (file["tags"] as? [[String: Any]] ?? []).compactMap { $0["tag"] as? String },
+                creatorID: (file["creator"] as? String) ?? (file["creator"] as? NSNumber)?.stringValue)
         }
         return order.compactMap { byID[$0] }
     }
@@ -273,6 +329,42 @@ public struct WorkshopCatalog: Sendable {
         guard (200..<300).contains(http.statusCode) else {
             throw WorkshopError(String(localized: "Steam 返回 HTTP \(http.statusCode)"))
         }
+    }
+}
+
+private final class PublicProfileXML: NSObject, XMLParserDelegate {
+    private var currentElement = ""
+    private var characters = ""
+    private(set) var steamID: String?
+
+    static func parse(_ data: Data) -> String? {
+        let delegate = PublicProfileXML()
+        let parser = XMLParser(data: data)
+        parser.delegate = delegate
+        guard parser.parse() else { return nil }
+        let name = delegate.steamID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name?.isEmpty == false ? name : nil
+    }
+
+    func parser(
+        _ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?,
+        qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]
+    ) {
+        currentElement = elementName
+        characters = ""
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        characters += string
+    }
+
+    func parser(
+        _ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?,
+        qualifiedName qName: String?
+    ) {
+        if elementName == "steamID" { steamID = characters }
+        currentElement = ""
+        characters = ""
     }
 }
 

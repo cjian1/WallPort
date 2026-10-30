@@ -39,7 +39,7 @@ Scene wallpapers with layers, effects, particles, puppet animation, text and clo
 <td width="50%" valign="top">
 
 **🔄 Your subscriptions, synced**<br>
-Sign in to Steam with a QR code and the wallpapers you subscribe to in the Workshop download to your Mac. You can also browse and subscribe right in the app.
+Sign in to Steam with a QR code and the wallpapers you subscribe to in the Workshop download to your Mac. You can also browse and subscribe in the app, prioritize, pause or cancel individual downloads, open an author's other items, and automatically fetch missing bases for dependency-backed Web presets.
 
 </td>
 </tr>

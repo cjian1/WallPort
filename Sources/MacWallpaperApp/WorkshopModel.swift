@@ -16,7 +16,7 @@ import WallpaperLibrary
 @MainActor
 final class WorkshopModel: NSObject, ObservableObject {
     enum ItemState: Equatable {
-        case waiting, downloading, done, failed(String)
+        case waiting, downloading, paused, done, failed(String)
     }
 
     struct QueueItem: Identifiable, Equatable {
@@ -151,16 +151,24 @@ final class WorkshopModel: NSObject, ObservableObject {
     @Published private(set) var message: String?
 
     /// 从创意工坊下载的壁纸放在这里（每件一个以编号命名的文件夹）
-    let downloadDirectory = Workshop.downloadDirectory
+    let downloadDirectory: URL
     /// 正在跑的下载（暂停时取消它）
     private var downloadTask: Task<Void, Never>?
-    private let catalog = WorkshopCatalog()
+    /// 当前真正在联网下载的那一项；同批其他项只是排队等它
+    private var activeDownloadID: String?
+    private let catalog: WorkshopCatalog
     /// 原生会话：登录、订阅、下载都走它
-    private let native = WorkshopNative()
+    private let native: WorkshopNative
+    private let downloadOperation: DownloadOperation
+    typealias DownloadOperation = @Sendable (
+        String, URL, SteamCMSession, (@Sendable (Double) -> Void)?
+    ) async throws -> URL
     private let sessionStore = SteamCMSessionStore()
     /// 壁纸库的文件夹（在后台扫描本机已有的条目用）
     private let libraryFolders: () -> [URL]
     private let onDownloaded: (URL) -> Void
+    /// 某一件下载失败了（参数是条目编号）：在等它的依赖型预设要换成写着原因的提示
+    private let onDownloadFailed: (String) -> Void
     private let onUnsubscribed: ([URL]) -> Void
     /// 写进 App 的日志（~/WallPort/Logs/desktop.log）；只记事件，不记令牌、密码
     private let log: (String) -> Void
@@ -181,15 +189,27 @@ final class WorkshopModel: NSObject, ObservableObject {
     init(
         libraryFolders: @escaping () -> [URL], onDownloaded: @escaping (URL) -> Void,
         onUnsubscribed: @escaping ([URL]) -> Void, log: @escaping (String) -> Void = { _ in },
-        usesCustomAssets: @escaping () -> Bool = { false }, onEngineAssetsInstalled: @escaping () -> Void = {}
+        usesCustomAssets: @escaping () -> Bool = { false }, onEngineAssetsInstalled: @escaping () -> Void = {},
+        initialSession: SteamCMSession? = nil, downloadOperation: DownloadOperation? = nil,
+        catalog: WorkshopCatalog = WorkshopCatalog(), downloadDirectory: URL = Workshop.downloadDirectory,
+        onDownloadFailed: @escaping (String) -> Void = { _ in }
     ) {
+        let native = WorkshopNative()
+        self.native = native
+        self.catalog = catalog
+        self.downloadDirectory = downloadDirectory
+        self.downloadOperation = downloadOperation ?? { id, directory, session, progress in
+            try await native.download(id: id, to: directory, session: session, progress: progress)
+        }
         self.libraryFolders = libraryFolders
         self.onDownloaded = onDownloaded
+        self.onDownloadFailed = onDownloadFailed
         self.onUnsubscribed = onUnsubscribed
         self.log = log
         self.usesCustomAssets = usesCustomAssets
         self.onEngineAssetsInstalled = onEngineAssetsInstalled
         super.init()
+        session = initialSession
     }
 
     // MARK: - Wallpaper Engine 自带素材
@@ -375,7 +395,102 @@ final class WorkshopModel: NSObject, ObservableObject {
         return ids
     }
     func state(of id: String) -> ItemState? { queue.first { $0.id == id }?.state }
-    var selectedItem: WorkshopItem? { items.first { $0.id == selectedID } }
+    var selectedItem: WorkshopItem? {
+        items.first { $0.id == selectedID }
+            ?? authorWorks.first { $0.id == selectedID }
+            ?? snapshots.values.lazy.compactMap { $0.items.first { $0.id == self.selectedID } }.first
+    }
+
+    // MARK: - 作者
+
+    @Published private(set) var authorNames: [String: String] = [:]
+    @Published private(set) var selectedAuthor: WorkshopAuthor?
+    @Published private(set) var authorWorks: [WorkshopItem] = []
+    @Published private(set) var hasMoreAuthorWorks = true
+    @Published private(set) var isLoadingAuthorWorks = false
+    @Published private(set) var authorWorksError: String?
+    private var authorNextPage = 1
+    private var authorReturnSelection: String?
+    private var loadingAuthorNames: Set<String> = []
+
+    func authorName(for steamID: String?) -> String? {
+        guard let steamID else { return nil }
+        return authorNames[steamID] ?? steamID
+    }
+
+    func loadAuthorName(_ steamID: String) async {
+        guard authorNames[steamID] == nil, loadingAuthorNames.insert(steamID).inserted else { return }
+        defer { loadingAuthorNames.remove(steamID) }
+        let author = try? await catalog.author(steamID)
+        authorNames[steamID] = author?.name ?? steamID
+    }
+
+    func openAuthor(_ steamID: String, name: String? = nil) async {
+        if selectedAuthor == nil { authorReturnSelection = selectedID }
+        let resolved: WorkshopAuthor
+        if let name, !name.isEmpty {
+            resolved = WorkshopAuthor(
+                steamID: steamID, name: name,
+                profileURL: URL(string: "https://steamcommunity.com/profiles/\(steamID)/")!)
+        } else if let author = try? await catalog.author(steamID) {
+            resolved = author
+        } else {
+            resolved = WorkshopAuthor(
+                steamID: steamID, name: authorNames[steamID] ?? steamID,
+                profileURL: URL(string: "https://steamcommunity.com/profiles/\(steamID)/")!)
+        }
+        selectedAuthor = resolved
+        authorNames[steamID] = resolved.name
+        authorWorks = []
+        authorNextPage = 1
+        hasMoreAuthorWorks = true
+        authorWorksError = nil
+        await loadMoreAuthorWorks()
+        if !authorWorks.contains(where: { $0.id == selectedID }) {
+            selectedID = authorWorks.first?.id
+        }
+    }
+
+    func loadMoreAuthorWorks() async {
+        guard let author = selectedAuthor, hasMoreAuthorWorks, !isLoadingAuthorWorks else { return }
+        let steamID = author.steamID
+        let page = authorNextPage
+        isLoadingAuthorWorks = true
+        authorWorksError = nil
+        defer { isLoadingAuthorWorks = false }
+        do {
+            let result = try await catalog.authorWorks(steamID, page: page)
+            guard selectedAuthor?.steamID == steamID else { return }
+            let known = Set(authorWorks.map(\.id))
+            let fresh = result.items.filter { !known.contains($0.id) }
+            authorWorks += fresh
+            authorNextPage += 1
+            // 一页里全是已经列出的也当到头了：页码超出范围时页面可能重复给最后一页，不然会一直显示"还有"
+            hasMoreAuthorWorks = !result.reachedEnd && !fresh.isEmpty
+        } catch {
+            guard selectedAuthor?.steamID == steamID else { return }
+            authorWorksError = error.localizedDescription
+            // 先停住滚到底自动加载（不然每次出现最后一张都重试）；点「重试」再从这一页接着读
+            hasMoreAuthorWorks = false
+        }
+    }
+
+    /// 读取作者作品失败后点「重试」：从失败的那一页接着读
+    func retryAuthorWorks() async {
+        guard selectedAuthor != nil, !isLoadingAuthorWorks else { return }
+        hasMoreAuthorWorks = true
+        authorWorksError = nil
+        await loadMoreAuthorWorks()
+    }
+
+    func closeAuthor() {
+        selectedAuthor = nil
+        authorWorks = []
+        authorWorksError = nil
+        hasMoreAuthorWorks = true
+        selectedID = authorReturnSelection
+        authorReturnSelection = nil
+    }
 
     // MARK: - 壁纸网格
 
@@ -787,6 +902,8 @@ final class WorkshopModel: NSObject, ObservableObject {
 
     /// 在 Steam 上订阅或取消订阅（用户点了按钮才调）
     func setSubscribed(_ subscribed: Bool, id: String) async -> Workshop.SubscribeResult {
+        // 取消订阅也是取消这次下载：当前项中断，其他壁纸继续
+        if !subscribed { cancelDownload(id) }
         // 界面先变：点了马上看到结果（网络来回、断线后重连登录要一两秒到几秒）；Steam 回失败再改回去
         let wasSubscribed = subscribedIDs.contains(id)
         let previousAll = allSubscriptions
@@ -889,7 +1006,12 @@ final class WorkshopModel: NSObject, ObservableObject {
     // MARK: - 下载
 
     func download(_ ids: [String]) {
-        let fresh = ids.filter { state(of: $0) != .waiting && state(of: $0) != .downloading }
+        let fresh = ids.filter {
+            switch state(of: $0) {
+            case .waiting, .downloading, .paused: false
+            default: true
+            }
+        }
         guard !fresh.isEmpty else { return }
         queue.removeAll { fresh.contains($0.id) }
         queue += fresh.map { QueueItem(id: $0, state: .waiting) }
@@ -902,10 +1024,27 @@ final class WorkshopModel: NSObject, ObservableObject {
         queue = items
         isPaused = paused
     }
+
+    /// 布局测试用：直接摆出作者作品面板
+    func showAuthorForLayoutTest(_ author: WorkshopAuthor, works: [WorkshopItem]) {
+        selectedAuthor = author
+        authorWorks = works
+        selectedID = works.first?.id
+        hasMoreAuthorWorks = false
+    }
     #endif
 
-    /// 还没下的（等着的和正在下的）
-    var pendingCount: Int { queue.filter { $0.state == .waiting || $0.state == .downloading }.count }
+    /// 还没结束的（等着的、正在下的和单项暂停的）
+    var pendingCount: Int {
+        queue.filter {
+            switch $0.state {
+            case .waiting, .downloading, .paused: true
+            case .done, .failed: false
+            }
+        }.count
+    }
+    var scheduledCount: Int { queue.filter { $0.state == .waiting || $0.state == .downloading }.count }
+    var itemPausedCount: Int { queue.filter { $0.state == .paused }.count }
 
     /// 暂停：正在下的那件马上停下、放回等待（半截的临时文件会删掉），点「继续」从它开始接着下
     func pauseDownloads() {
@@ -923,60 +1062,127 @@ final class WorkshopModel: NSObject, ObservableObject {
         runQueue()
     }
 
+    /// 把等待中的项目移到等待队列最前；当前正在下载的项目不打断。
+    func prioritizeDownload(_ id: String) {
+        // 已经排在等待的第一个就不动（预设每次重新载入都会要求一次，不重复记日志）
+        guard let index = queue.firstIndex(where: { $0.id == id }), queue[index].state == .waiting,
+              index != queue.firstIndex(where: { $0.state == .waiting })
+        else { return }
+        let item = queue.remove(at: index)
+        let destination = queue.firstIndex { $0.state == .waiting } ?? queue.endIndex
+        queue.insert(item, at: destination)
+        log("创意工坊：优先下载 \(id)")
+    }
+
+    /// 单项暂停。暂停当前项目会中断它，但队列里的其他项目继续。
+    func pauseDownload(_ id: String) {
+        guard let index = queue.firstIndex(where: { $0.id == id }),
+              queue[index].state == .waiting || queue[index].state == .downloading
+        else { return }
+        queue[index].state = .paused
+        progress[id] = nil
+        if activeDownloadID == id { downloadTask?.cancel() }
+        log("创意工坊：暂停下载 \(id)")
+    }
+
+    func resumeDownload(_ id: String) {
+        guard let index = queue.firstIndex(where: { $0.id == id }), queue[index].state == .paused else { return }
+        queue[index].state = .waiting
+        log("创意工坊：继续下载 \(id)")
+        if !isPaused { runQueue() }
+    }
+
+    /// 取消订阅时把这一项从下载队列拿掉，其他壁纸不受影响。
+    func cancelDownload(_ id: String) {
+        let wasActive = activeDownloadID == id
+        queue.removeAll { $0.id == id }
+        progress[id] = nil
+        if wasActive { downloadTask?.cancel() }
+    }
+
     private func runQueue() {
         guard !isPaused, !isDownloading, queue.contains(where: { $0.state == .waiting }) else { return }
         guard isLoggedIn else {
             showLogin(reason: String(localized: "下载前要先登录 Steam。")) { self.runQueue() }
             return
         }
-        let batch = queue.filter { $0.state == .waiting }.prefix(20).map(\.id)
         isDownloading = true
-        setState(.downloading, for: batch)
-        message = String(localized: "正在下载 \(batch.count) 个…")
+        message = String(localized: "正在下载 \(scheduledCount) 个…")
         downloadTask = Task {
             // 一件一件来（每件内部是"详情 → depot 密钥 → 清单 → 分块"，整件下完才放进下载目录）
             var lastFailure: String?
             var needsLogin = false
             var done: [String] = []
-            for id in batch {
-                // 暂停了：剩下的留着，点「继续」再下
-                if isPaused || Task.isCancelled { break }
+            var attempted: [String] = []
+            while !isPaused, !Task.isCancelled {
+                // 每件开始前重新看队列：等待期间用户可能优先、暂停或取消了某一件
+                guard let index = queue.firstIndex(where: { $0.state == .waiting }) else { break }
+                let id = queue[index].id
+                queue[index].state = .downloading
+                attempted.append(id)
                 do {
+                    activeDownloadID = id
                     log("创意工坊：开始下载 \(id)")
                     _ = try await withSession { session in
-                        try await self.native.download(id: id, to: self.downloadDirectory, session: session) { fraction in
+                        try await self.downloadOperation(id, self.downloadDirectory, session) { fraction in
                             Task { @MainActor in self.setProgress(fraction, for: id) }
                         }
                     }
+                    activeDownloadID = nil
                     progress[id] = nil
                     setState(.done, for: [id])
                     done.append(id)
                     log("创意工坊：下载完成 \(id)")
+                    if let dependencyID = Workshop.missingDependency(
+                        forProjectFolder: self.downloadDirectory.appendingPathComponent(id, isDirectory: true),
+                        downloadDirectories: [self.downloadDirectory]
+                            + Workshop.previousDownloadDirectories + self.libraryFolders()
+                    ) {
+                        log("创意工坊：预设 \(id) 缺少基础项目 \(dependencyID)，自动加入下载")
+                        // 排到等待的最前：同步订阅时队里可能还有几十件，预设要等它才能放
+                        self.download([dependencyID])
+                        self.prioritizeDownload(dependencyID)
+                    }
                     // 下好一个就进壁纸库（原来等这一批 20 个都下完才刷新，同步订阅时要等好几分钟）
                     onDownloaded(downloadDirectory)
                 } catch WorkshopNative.Failure.notLoggedIn {
                     // 登录过期了：剩下的先放回等待，重新登录后接着下
+                    activeDownloadID = nil
                     progress[id] = nil
                     needsLogin = true
                     break
                 } catch {
+                    activeDownloadID = nil
                     progress[id] = nil
-                    // 暂停打断的不算失败：放回等待
-                    if isPaused || Task.isCancelled { break }
+                    if isPaused || Task.isCancelled {
+                        // 单项暂停时状态已经是 paused；只有全局暂停打断的项才放回等待
+                        if state(of: id) == .downloading { setState(.waiting, for: [id]) }
+                        break
+                    }
                     lastFailure = error.localizedDescription
                     setState(.failed(error.localizedDescription), for: [id])
                     log("创意工坊：下载 \(id) 失败（\(error.localizedDescription)）")
+                    onDownloadFailed(id)
                 }
             }
-            setState(.waiting, for: batch.filter { state(of: $0) == .downloading })
+            let wasCancelled = Task.isCancelled
+            activeDownloadID = nil
             isDownloading = false
             downloadTask = nil
             if isPaused { return }
+            if wasCancelled {
+                // 取消一项会中断当前批任务；把同一批还没有取消的项重新排队继续下载
+                runQueue()
+                return
+            }
             if needsLogin {
                 showLogin(reason: String(localized: "Steam 的登录过期了，重新登录后接着下载。")) { self.runQueue() }
                 return
             }
-            let failed = batch.count - done.count
+            // 没真正进入下载的等待项和被取消项不算失败
+            let failed = attempted.filter {
+                if case .failed = state(of: $0) { true } else { false }
+            }.count
             if let lastFailure, done.isEmpty {
                 message = String(localized: "下载失败：\(lastFailure)")
             } else {
@@ -999,7 +1205,12 @@ final class WorkshopModel: NSObject, ObservableObject {
     }
 
     func clearFinished() {
-        queue.removeAll { $0.state != .waiting && $0.state != .downloading }
+        queue.removeAll {
+            switch $0.state {
+            case .done, .failed: true
+            case .waiting, .downloading, .paused: false
+            }
+        }
     }
 
     private func setState(_ state: ItemState, for ids: [String]) {

@@ -71,3 +71,339 @@ import WallpaperLibrary
         #expect(order == ["1000002", "我的壁纸", "1000001"])
     }
 }
+
+@MainActor
+@Suite struct WorkshopDownloadCancellationTests {
+    private func model() -> WorkshopModel {
+        WorkshopModel(
+            libraryFolders: { [] },
+            onDownloaded: { _ in },
+            onUnsubscribed: { _ in })
+    }
+
+    /// 取消订阅其中一个正在下载的壁纸，只把这一项从队列拿掉，其他壁纸继续下载。
+    @Test func cancellingOneDownloadKeepsTheRestOfTheQueue() {
+        let model = model()
+        model.showQueueForLayoutTest([
+            .init(id: "1", state: .downloading),
+            .init(id: "2", state: .downloading),
+            .init(id: "3", state: .waiting),
+        ], paused: false)
+
+        model.cancelDownload("1")
+
+        #expect(model.queue.map(\.id) == ["2", "3"])
+        #expect(model.state(of: "1") == nil)
+        #expect(model.state(of: "2") == .downloading)
+        #expect(model.state(of: "3") == .waiting)
+    }
+
+    /// 用户从右键菜单取消订阅时，走的是 `setSubscribed(false)`；它要在联系 Steam 前先停掉本机下载。
+    @Test func unsubscribingRemovesOnlyThatDownloadBeforeContactingSteam() async {
+        let model = model()
+        model.showQueueForLayoutTest([
+            .init(id: "1", state: .downloading),
+            .init(id: "2", state: .downloading),
+            .init(id: "3", state: .waiting),
+        ], paused: false)
+
+        let result = await model.setSubscribed(false, id: "1")
+
+        guard case .notLoggedIn = result else {
+            Issue.record("测试没有登录，Steam 调用应返回 notLoggedIn")
+            return
+        }
+        #expect(model.queue.map(\.id) == ["2", "3"])
+    }
+
+    /// 正在联网下载的那一项也要停；取消后队列里下一项继续，不必重启整个 App。
+    @Test func cancellingTheActiveDownloadStopsItAndContinuesWithTheNext() async {
+        let (startEvents, startContinuation) = AsyncStream.makeStream(of: String.self)
+        let (cancelEvents, cancelContinuation) = AsyncStream.makeStream(of: String.self)
+        let operation: @Sendable (
+            String, URL, SteamCMSession, (@Sendable (Double) -> Void)?
+        ) async throws -> URL = { id, directory, _, _ in
+            startContinuation.yield(id)
+            do {
+                try await Task.sleep(for: .seconds(30))
+            } catch {
+                cancelContinuation.yield(id)
+                throw error
+            }
+            return directory.appendingPathComponent(id)
+        }
+        let session = SteamCMSession(
+            accountName: "someone", steamID: "76561198000000001",
+            refreshToken: "header.payload.signature")
+        let model = WorkshopModel(
+            libraryFolders: { [] }, onDownloaded: { _ in }, onUnsubscribed: { _ in },
+            initialSession: session, downloadOperation: operation)
+        var starts = startEvents.makeAsyncIterator()
+        var cancellations = cancelEvents.makeAsyncIterator()
+
+        model.download(["1", "2"])
+        #expect(await starts.next() == "1")
+        model.cancelDownload("1")
+        #expect(await cancellations.next() == "1")
+        #expect(await starts.next() == "2")
+
+        model.cancelDownload("2")
+        #expect(await cancellations.next() == "2")
+        #expect(model.queue.isEmpty)
+    }
+
+    /// 从同一批里取消一个尚未开始的项，不能把它算成“下载失败”。
+    @Test func cancellingAWaitingItemDoesNotReportItAsFailed() async {
+        let (startEvents, startContinuation) = AsyncStream.makeStream(of: String.self)
+        let (releaseEvents, releaseContinuation) = AsyncStream.makeStream(of: Void.self)
+        let (downloadedEvents, downloadedContinuation) = AsyncStream.makeStream(of: URL.self)
+        let operation: @Sendable (
+            String, URL, SteamCMSession, (@Sendable (Double) -> Void)?
+        ) async throws -> URL = { id, directory, _, _ in
+            startContinuation.yield(id)
+            for await _ in releaseEvents { break }
+            return directory.appendingPathComponent(id)
+        }
+        let session = SteamCMSession(
+            accountName: "someone", steamID: "76561198000000001",
+            refreshToken: "header.payload.signature")
+        let model = WorkshopModel(
+            libraryFolders: { [] },
+            onDownloaded: { downloadedContinuation.yield($0) },
+            onUnsubscribed: { _ in },
+            initialSession: session, downloadOperation: operation)
+        var starts = startEvents.makeAsyncIterator()
+        var downloads = downloadedEvents.makeAsyncIterator()
+
+        model.download(["1", "2"])
+        #expect(await starts.next() == "1")
+        model.cancelDownload("2")
+        releaseContinuation.yield(())
+        #expect(await downloads.next() != nil)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while model.isDownloading, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(!model.isDownloading)
+        #expect(model.state(of: "1") == .done)
+        #expect(model.message?.contains("失败") == false)
+    }
+
+    /// 「优先下载」应把目标放到等待队列最前，但不打断正在下载的项目。
+    @Test func prioritizingAWaitingDownloadRunsItAfterTheActiveOne() async {
+        let (startEvents, startContinuation) = AsyncStream.makeStream(of: String.self)
+        let (releaseEvents, releaseContinuation) = AsyncStream.makeStream(of: Void.self)
+        let operation: @Sendable (
+            String, URL, SteamCMSession, (@Sendable (Double) -> Void)?
+        ) async throws -> URL = { id, directory, _, _ in
+            startContinuation.yield(id)
+            for await _ in releaseEvents { break }
+            return directory.appendingPathComponent(id)
+        }
+        let session = SteamCMSession(
+            accountName: "someone", steamID: "76561198000000001",
+            refreshToken: "header.payload.signature")
+        let model = WorkshopModel(
+            libraryFolders: { [] }, onDownloaded: { _ in }, onUnsubscribed: { _ in },
+            initialSession: session, downloadOperation: operation)
+        var starts = startEvents.makeAsyncIterator()
+
+        model.download(["1", "2", "3"])
+        #expect(await starts.next() == "1")
+        model.prioritizeDownload("3")
+        releaseContinuation.yield(())
+        #expect(await starts.next() == "3")
+        releaseContinuation.yield(())
+        #expect(await starts.next() == "2")
+        releaseContinuation.yield(())
+    }
+
+    /// 暂停等待中的项目后，它不会在轮到它时启动；其他项目继续。
+    @Test func pausingAWaitingDownloadSkipsIt() async {
+        let (startEvents, startContinuation) = AsyncStream.makeStream(of: String.self)
+        let (releaseEvents, releaseContinuation) = AsyncStream.makeStream(of: Void.self)
+        let operation: @Sendable (
+            String, URL, SteamCMSession, (@Sendable (Double) -> Void)?
+        ) async throws -> URL = { id, directory, _, _ in
+            startContinuation.yield(id)
+            for await _ in releaseEvents { break }
+            return directory.appendingPathComponent(id)
+        }
+        let session = SteamCMSession(
+            accountName: "someone", steamID: "76561198000000001",
+            refreshToken: "header.payload.signature")
+        let model = WorkshopModel(
+            libraryFolders: { [] }, onDownloaded: { _ in }, onUnsubscribed: { _ in },
+            initialSession: session, downloadOperation: operation)
+        var starts = startEvents.makeAsyncIterator()
+
+        model.download(["1", "2", "3"])
+        #expect(await starts.next() == "1")
+        model.pauseDownload("2")
+        releaseContinuation.yield(())
+        #expect(await starts.next() == "3")
+        releaseContinuation.yield(())
+        #expect(model.state(of: "2") == .paused)
+    }
+
+    /// 暂停正在下载的项目要中断当前传输，并让下一项继续。
+    @Test func pausingTheActiveDownloadStopsItAndContinues() async {
+        let (startEvents, startContinuation) = AsyncStream.makeStream(of: String.self)
+        let (releaseEvents, releaseContinuation) = AsyncStream.makeStream(of: Void.self)
+        let operation: @Sendable (
+            String, URL, SteamCMSession, (@Sendable (Double) -> Void)?
+        ) async throws -> URL = { id, directory, _, _ in
+            startContinuation.yield(id)
+            if id == "1" {
+                try await Task.sleep(for: .milliseconds(200))
+            } else {
+                for await _ in releaseEvents { break }
+            }
+            return directory.appendingPathComponent(id)
+        }
+        let session = SteamCMSession(
+            accountName: "someone", steamID: "76561198000000001",
+            refreshToken: "header.payload.signature")
+        let model = WorkshopModel(
+            libraryFolders: { [] }, onDownloaded: { _ in }, onUnsubscribed: { _ in },
+            initialSession: session, downloadOperation: operation)
+        var starts = startEvents.makeAsyncIterator()
+
+        model.download(["1", "2"])
+        #expect(await starts.next() == "1")
+        model.pauseDownload("1")
+        #expect(await starts.next() == "2")
+        #expect(model.state(of: "1") == .paused)
+        releaseContinuation.yield(())
+    }
+
+    /// 继续单项暂停后，它重新进入正常等待队列并可开始下载。
+    @Test func resumingAPausedDownloadStartsItAgain() async {
+        let (startEvents, startContinuation) = AsyncStream.makeStream(of: String.self)
+        let (releaseEvents, releaseContinuation) = AsyncStream.makeStream(of: Void.self)
+        let operation: @Sendable (
+            String, URL, SteamCMSession, (@Sendable (Double) -> Void)?
+        ) async throws -> URL = { id, directory, _, _ in
+            startContinuation.yield(id)
+            for await _ in releaseEvents { break }
+            return directory.appendingPathComponent(id)
+        }
+        let session = SteamCMSession(
+            accountName: "someone", steamID: "76561198000000001",
+            refreshToken: "header.payload.signature")
+        let model = WorkshopModel(
+            libraryFolders: { [] }, onDownloaded: { _ in }, onUnsubscribed: { _ in },
+            initialSession: session, downloadOperation: operation)
+        var starts = startEvents.makeAsyncIterator()
+
+        model.download(["1", "2"])
+        #expect(await starts.next() == "1")
+        model.pauseDownload("2")
+        model.resumeDownload("2")
+        releaseContinuation.yield(())
+        #expect(await starts.next() == "2")
+        releaseContinuation.yield(())
+    }
+
+    /// 下载完成的预设如果缺少基础项目，基础项目会自动排进下载队列，且只下载一次。
+    @Test func downloadingPresetQueuesItsMissingDependency() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WorkshopDependency-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (startEvents, startContinuation) = AsyncStream.makeStream(of: String.self)
+        let operation: @Sendable (
+            String, URL, SteamCMSession, (@Sendable (Double) -> Void)?
+        ) async throws -> URL = { id, directory, _, _ in
+            let folder = directory.appendingPathComponent(id, isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let json = id == "3825824301"
+                ? #"{"title":"Preset","dependency":"884307090","preset":{"wallpapermode":2}}"#
+                : #"{"title":"Base","type":"web","file":"index.html"}"#
+            try Data(json.utf8).write(to: folder.appendingPathComponent("project.json"))
+            startContinuation.yield(id)
+            return folder
+        }
+        let session = SteamCMSession(
+            accountName: "someone", steamID: "76561198000000001",
+            refreshToken: "header.payload.signature")
+        let model = WorkshopModel(
+            libraryFolders: { [root] }, onDownloaded: { _ in }, onUnsubscribed: { _ in },
+            initialSession: session, downloadOperation: operation, downloadDirectory: root)
+        var starts = startEvents.makeAsyncIterator()
+
+        model.download(["3825824301"])
+        #expect(await starts.next() == "3825824301")
+        #expect(await starts.next() == "884307090")
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while model.isDownloading, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(!model.isDownloading)
+        #expect(model.queue.map(\.id) == ["3825824301", "884307090"])
+    }
+
+    /// 自动补的基础项目排到等待的最前：同步订阅时队里还有别的，也先下它，预设好尽快能放。
+    @Test func missingDependencyJumpsAheadOfOtherWaitingDownloads() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WorkshopDependency-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (startEvents, startContinuation) = AsyncStream.makeStream(of: String.self)
+        let operation: @Sendable (
+            String, URL, SteamCMSession, (@Sendable (Double) -> Void)?
+        ) async throws -> URL = { id, directory, _, _ in
+            let folder = directory.appendingPathComponent(id, isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let json = id == "3825824301"
+                ? #"{"title":"Preset","dependency":"884307090","preset":{"wallpapermode":2}}"#
+                : #"{"title":"Other","type":"web","file":"index.html"}"#
+            try Data(json.utf8).write(to: folder.appendingPathComponent("project.json"))
+            startContinuation.yield(id)
+            return folder
+        }
+        let session = SteamCMSession(
+            accountName: "someone", steamID: "76561198000000001",
+            refreshToken: "header.payload.signature")
+        let model = WorkshopModel(
+            libraryFolders: { [root] }, onDownloaded: { _ in }, onUnsubscribed: { _ in },
+            initialSession: session, downloadOperation: operation, downloadDirectory: root)
+        var starts = startEvents.makeAsyncIterator()
+
+        model.download(["3825824301", "111111111", "222222222"])
+        #expect(await starts.next() == "3825824301")
+        #expect(await starts.next() == "884307090")
+        #expect(await starts.next() == "111111111")
+        #expect(await starts.next() == "222222222")
+    }
+
+    /// 下载失败要告诉 App（在等这件基础壁纸的预设会换成写着原因的提示），其他项目照常下完。
+    @Test func failedDownloadIsReportedAndTheQueueContinues() async throws {
+        struct Broken: Error {}
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WorkshopFailure-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let operation: @Sendable (
+            String, URL, SteamCMSession, (@Sendable (Double) -> Void)?
+        ) async throws -> URL = { id, directory, _, _ in
+            if id == "884307090" { throw Broken() }
+            return directory.appendingPathComponent(id, isDirectory: true)
+        }
+        let session = SteamCMSession(
+            accountName: "someone", steamID: "76561198000000001",
+            refreshToken: "header.payload.signature")
+        var failed: [String] = []
+        let model = WorkshopModel(
+            libraryFolders: { [] }, onDownloaded: { _ in }, onUnsubscribed: { _ in },
+            initialSession: session, downloadOperation: operation, downloadDirectory: root,
+            onDownloadFailed: { failed.append($0) })
+
+        model.download(["884307090", "111111111"])
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while model.isDownloading || model.state(of: "111111111") != .done, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(failed == ["884307090"])
+        if case .failed? = model.state(of: "884307090") {} else { Issue.record("基础壁纸应当标成下载失败") }
+        #expect(model.state(of: "111111111") == .done)
+    }
+}

@@ -44,6 +44,27 @@ import Testing
         #expect(projects.first { $0.title == "海边" }?.preview?.lastPathComponent == "海边.PNG")
     }
 
+    /// 同一个壁纸库里的基础项目和预设项目按编号关联，预设直接进入可播放的 Web 类型。
+    @Test func scannerResolvesPresetDependencyFromTheSameLibrary() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("LibraryScannerTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let base = root.appendingPathComponent("884307090", isDirectory: true)
+        let preset = root.appendingPathComponent("3825824301", isDirectory: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: preset, withIntermediateDirectories: true)
+        try Data(#"{"title":"Base","type":"web","file":"index.html","general":{"properties":{"wallpapermode":{"type":"slider","value":1}}}}"#.utf8)
+            .write(to: base.appendingPathComponent("project.json"))
+        try Data(#"{"title":"Preset","dependency":"884307090","preset":{"wallpapermode":2}}"#.utf8)
+            .write(to: preset.appendingPathComponent("project.json"))
+
+        let projects = LibraryScanner.scan(folders: [root])
+        let child = try #require(projects.first { $0.folder == preset })
+        #expect(child.kind == .web)
+        #expect(child.contentFolder == base)
+        #expect(child.entry == base.appendingPathComponent("index.html"))
+    }
+
     @Test func foldersArePersistedWithAFallback() throws {
         let defaults = try #require(UserDefaults(suiteName: "LibraryScannerTests-\(UUID().uuidString)"))
         let fallback = FileManager.default.temporaryDirectory

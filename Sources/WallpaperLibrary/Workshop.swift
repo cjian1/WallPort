@@ -64,6 +64,21 @@ public enum Workshop {
         return isItemID(name) ? name : nil
     }
 
+    /// 预设项目依赖的基础条目还没出现在任一已知下载目录时返回它的编号。
+    public static func missingDependency(forProjectFolder folder: URL, downloadDirectories: [URL]) -> String? {
+        guard let project = try? WallpaperProject(folder: folder),
+              let dependencyID = project.dependencyID,
+              project.isDependencyBackedPreset,
+              dependencyID != folder.standardizedFileURL.lastPathComponent
+        else { return nil }
+        let installed = downloadDirectories.contains { directory in
+            FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent(dependencyID)
+                    .appendingPathComponent("project.json").path)
+        }
+        return installed ? nil : dependencyID
+    }
+
     /// 创意工坊编号：纯数字，现在的编号都是 9–10 位
     public static func isItemID(_ text: String) -> Bool {
         (6...20).contains(text.count) && text.allSatisfy(\.isASCII) && text.allSatisfy(\.isNumber)

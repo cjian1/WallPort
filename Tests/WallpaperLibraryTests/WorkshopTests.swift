@@ -19,6 +19,28 @@ import Testing
         #expect(!Workshop.isValidAccountName("有中文"))
     }
 
+    /// 依赖型预设只在基础项目还没下载时返回依赖编号；基础项目任一已知目录里已有就不重复下载。
+    @Test func missingDependencyLooksAcrossDownloadDirectories() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("workshop-deps-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let current = root.appendingPathComponent("current", isDirectory: true)
+        let previous = root.appendingPathComponent("previous", isDirectory: true)
+        let preset = current.appendingPathComponent("3825824301", isDirectory: true)
+        try FileManager.default.createDirectory(at: preset, withIntermediateDirectories: true)
+        try Data(#"{"title":"Preset","dependency":"884307090","preset":{}}"#.utf8)
+            .write(to: preset.appendingPathComponent("project.json"))
+        #expect(Workshop.missingDependency(
+            forProjectFolder: preset, downloadDirectories: [current, previous]) == "884307090")
+
+        let base = previous.appendingPathComponent("884307090", isDirectory: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        try Data(#"{"title":"Base","type":"web","file":"index.html"}"#.utf8)
+            .write(to: base.appendingPathComponent("project.json"))
+        #expect(Workshop.missingDependency(
+            forProjectFolder: preset, downloadDirectories: [current, previous]) == nil)
+    }
+
     /// 下载到统一文件夹（~/WallPort/Workshop）；以前的三个位置还算创意工坊下载（统一文件夹里已经有同一个编号时旧的留在那里）
     @Test func downloadsGoIntoTheAppFolder() throws {
         #expect(Workshop.downloadDirectory.path.hasSuffix("/WallPort/Workshop"))

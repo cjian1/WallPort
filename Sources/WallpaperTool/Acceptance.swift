@@ -139,7 +139,7 @@ private func measure(
     let scene: SceneDescription?
     let started = Date()
     do {
-        let package = try ScenePackage(contentsOf: project.folder.appendingPathComponent("scene.pkg"))
+        let package = try ScenePackage(contentsOf: project.contentFolder.appendingPathComponent("scene.pkg"))
         scene = try? SceneDescription(json: package.contents(of: "scene.json") ?? Data())
         renderer = try SceneRenderer(
             device: device, package: package, assets: assets, targetSize: SIMD2(Float(width), Float(height)),

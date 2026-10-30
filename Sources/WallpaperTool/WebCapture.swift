@@ -27,7 +27,7 @@ func webCapture(folder: String, output: String, size: CGSize) async -> Int32 {
     let outputURL = URL(fileURLWithPath: output)
     let log = EventLog(fileURL: outputURL.deletingPathExtension().appendingPathExtension("log"))
     let content = WebContent(
-        folder: project.folder, entry: entry, userProperties: project.userPropertiesJSON(overrides: [:]),
+        folder: project.contentFolder, entry: entry, userProperties: project.userPropertiesJSON(overrides: [:]),
         allowNetwork: true, label: "web-capture", log: log)
     let window = NSWindow(
         contentRect: NSRect(origin: CGPoint(x: -20000, y: -20000), size: size), styleMask: .borderless,

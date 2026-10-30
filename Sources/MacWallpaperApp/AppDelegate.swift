@@ -77,7 +77,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         onUnsubscribed: { [weak self] folders in self?.offerToTrashUnsubscribed(folders) },
         log: { [weak self] text in self?.log.write(text) },
         usesCustomAssets: { AppFolder.settings.string(forKey: Self.assetsDefaultsKey) != nil },
-        onEngineAssetsInstalled: { [weak self] in self?.engineAssetsDidChange() })
+        onEngineAssetsInstalled: { [weak self] in self?.engineAssetsDidChange() },
+        onDownloadFailed: { [weak self] id in self?.workshopDownloadDidFail(id) })
     private lazy var permissionPrimer = PermissionPrimer(log: log)
     private static let welcomeShownKey = "didShowWelcome"
 
@@ -310,6 +311,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             log.write("显示器 \(display.id) 读取项目失败 \(folder.path)：\(error.localizedDescription)")
             return makeTestPattern(for: display, notice: String(localized: "读取项目失败：\(error.localizedDescription)"))
         }
+        if project.entry == nil, let dependencyID = project.dependencyID {
+            // 依赖型预设，基础壁纸还没下好。下好之前一般保持原来的画面（占位），但没下成、没登录时要明说：
+            // 占位不会显示出来，不然屏幕一直停在原来的画面、看不出为什么没换
+            if case .failed(let reason)? = workshop.state(of: dependencyID) {
+                return makeTestPattern(
+                    for: display,
+                    notice: String(localized: "「\(project.title)」需要的基础壁纸没下载成功：\(reason)。在壁纸库里重新选它会再试一次。"))
+            }
+            workshop.download([dependencyID])
+            workshop.prioritizeDownload(dependencyID)
+            guard workshop.isLoggedIn else {
+                // 登录框在壁纸库窗口里，打开壁纸库就会弹出来，登录后自动接着下
+                return makeTestPattern(
+                    for: display,
+                    notice: String(localized: "「\(project.title)」要先下载它需要的基础壁纸：请打开壁纸库登录 Steam，登录后会自动下载。"))
+            }
+            return makeTestPattern(
+                for: display,
+                notice: String(localized: "正在下载「\(project.title)」需要的基础壁纸…"),
+                isPlaceholder: true)
+        }
         guard let entry = project.entry else {
             return makeTestPattern(for: display, notice: String(localized: "「\(project.title)」的 project.json 没有写入口文件"))
         }
@@ -321,7 +343,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // 开发用：设置了这个环境变量时，网页壁纸加载完会测帧率并截图到该目录
             let captureDirectory = ProcessInfo.processInfo.environment["MACWALLPAPER_CAPTURE_DIR"]
             let web = WebContent(
-                folder: project.folder, entry: entry,
+                folder: project.contentFolder, entry: entry,
                 userProperties: project.userPropertiesJSON(overrides: propertyStore.overrides(for: project.folder)),
                 allowNetwork: allowWebNetwork, label: "显示器 \(display.id)", log: log,
                 debugCapture: captureDirectory.map {
@@ -343,7 +365,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.crashGuard.end(guardToken)
             }
             let scene = SceneContent(
-                projectFolder: project.folder, assets: assetsDirectory, targetSize: display.pixelSize,
+                projectFolder: project.contentFolder, assets: assetsDirectory, targetSize: display.pixelSize,
                 userProperties: project.propertyValuesJSON(overrides: propertyStore.overrides(for: project.folder)),
                 hiddenElements: hiddenElementStore.hidden(for: project.folder),
                 display: SceneContent.Display(fitsWhole: options.fitsWhole, position: Float(options.clampedPosition)),
@@ -384,8 +406,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard !alreadyLoading else { return }
 
         let started = Date()
+        let dependencyDirectories = self.dependencyDirectories
         Task {
-            let result = await Task.detached { Result { try WallpaperProject(folder: folder) } }.value
+            let result = await Task.detached {
+                Result {
+                    try WallpaperProject(folder: folder)
+                        .resolvingDependency(in: dependencyDirectories)
+                }
+            }.value
             let seconds = Date().timeIntervalSince(started)
             if seconds > 1 {
                 log.write("读取项目 \(folder.lastPathComponent) 用了 \(String(format: "%.1f", seconds)) 秒（可能在等待访问授权）")
@@ -711,6 +739,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// - Parameter reportFailure: 轮播换壁纸时不弹窗打断用户（失败的照样写日志）
     private func apply(_ project: WallpaperProject, to display: DisplaySnapshot, reportFailure: Bool) {
+        // 菜单里直接选的文件夹没经过壁纸库扫描：依赖型预设在这里接上本机已有的基础项目，不然会白白再下一遍
+        let project = project.entry == nil ? project.resolvingDependency(in: dependencyDirectories) : project
+        // 用户亲自选的：上次没下成的基础壁纸再试一次（在等、在下的不会重复排）
+        if project.entry == nil, let dependencyID = project.dependencyID,
+           case .failed? = workshop.state(of: dependencyID) {
+            workshop.download([dependencyID])
+        }
         Task {
             if let reason = await unsupportedReason(for: project) {
                 log.write("显示器 \(display.id) 拒绝了项目 \(project.folder.path)：\(reason)")
@@ -1014,11 +1049,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// 创意工坊的壁纸下好了：下载目录加进壁纸库（第一次时），壁纸库重新扫描
+    /// 创意工坊的壁纸下好了：下载目录加进壁纸库（第一次时），壁纸库重新扫描；
+    /// 在等基础壁纸的预设，基础壁纸这下有了的，重新读项目、换上真正的画面
     private func workshopDidDownload(into folder: URL) {
         includeWorkshopFolder(folder)
+        // 只动还没接上基础壁纸的：已经在放的预设不重载，不然同步订阅时每下好一件就重新打开一次网页
+        let ready = presetsWaitingForDependency().filter {
+            Workshop.missingDependency(forProjectFolder: $0.folder, downloadDirectories: dependencyDirectories) == nil
+        }
+        for preset in ready { projects[Self.key(preset.folder)] = nil }
         libraryWindow?.model.rescan()
+        for preset in ready { controller?.reloadContent(for: preset.display) }
     }
+
+    /// 预设在等的基础壁纸下载失败了：重新载入，换成写着原因的提示
+    private func workshopDownloadDidFail(_ id: String) {
+        for preset in presetsWaitingForDependency() where preset.dependencyID == id {
+            controller?.reloadContent(for: preset.display)
+        }
+    }
+
+    /// 放着依赖型预设、但读到的项目还没接上基础壁纸（没有入口）的显示器
+    private func presetsWaitingForDependency() -> [(display: CGDirectDisplayID, folder: URL, dependencyID: String)] {
+        (controller?.displays ?? []).compactMap { display in
+            guard case .project(let folder) = assignments.source(forDisplay: display.stableKey),
+                  case .success(let project)? = projects[Self.key(folder)],
+                  project.entry == nil, let dependencyID = project.dependencyID
+            else { return nil }
+            return (display.id, folder, dependencyID)
+        }
+    }
+
+    /// 找依赖型预设的基础项目去哪些文件夹：创意工坊下载目录（含以前的）和壁纸库的文件夹
+    private var dependencyDirectories: [URL] { Workshop.downloadDirectories + libraryFolders.folders }
 
     /// 创意工坊的下载目录还不在壁纸库里就加进去
     private func includeWorkshopFolder(_ folder: URL) {
@@ -1653,7 +1716,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// 目前能放的是视频和网页项目；返回 nil 表示可以用
     private func unsupportedReason(for project: WallpaperProject) async -> String? {
-        guard let entry = project.entry else { return String(localized: "project.json 没有写入口文件") }
+        guard let entry = project.entry else {
+            if project.isDependencyBackedPreset { return nil }
+            return String(localized: "project.json 没有写入口文件")
+        }
         switch project.kind {
         case .video: return await VideoContent.unplayableReason(for: entry)
         case .web: return FileManager.default.fileExists(atPath: entry.path) ? nil : String(localized: "入口页面不存在")

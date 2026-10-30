@@ -186,7 +186,11 @@ import WallpaperLibrary
         let reason = "Steam 的内容服务器暂时忙不过来（cache1-lax1.steamcontent.com 返回 HTTP 503），过一会儿点「重试」"
         workshop.showQueueForLayoutTest(
             (0..<12).map { .init(id: "37851\(String(format: "%05d", $0))", state: .failed(reason)) }
-                + (0..<30).map { .init(id: "36000\(String(format: "%05d", $0))", state: $0 == 0 && !paused ? .downloading : .waiting) },
+                + (0..<30).map {
+                    .init(
+                        id: "36000\(String(format: "%05d", $0))",
+                        state: $0 < 3 ? .paused : ($0 == 3 && !paused ? .downloading : .waiting))
+                },
             paused: paused)
         let size = CGSize(width: 880, height: 60)
         let window = Self.host(WorkshopStatusBar(model: workshop).frame(width: size.width), size: size)
@@ -286,5 +290,38 @@ import WallpaperLibrary
         let label = "工坊 \(Int(size.width))×\(Int(size.height))"
         Self.snapshot(window, name: "workshop-\(Int(size.width))x\(Int(size.height))")
         try Self.checkColumns(window, label)
+    }
+
+    /// 作者作品面板：作者标题、作品网格和右侧详情都放得下，不越出面板。
+    @Test func authorWorksSheetFitsItsColumns() async throws {
+        let (library, root) = try Self.makeLibrary()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workshop = library.workshop
+        let steamID = "76561199453602723"
+        let author = WorkshopAuthor(
+            steamID: steamID, name: "一位名字比较长的壁纸作者",
+            profileURL: URL(string: "https://steamcommunity.com/profiles/\(steamID)/")!)
+        let works = (0..<8).map { index in
+            WorkshopItem(
+                id: "\(3_900_000_000 + index)", title: "作者作品 \(index + 1)：一个需要换行的长标题",
+                previewURL: nil, subscriptions: 100, favorited: 10, fileSize: 1_000,
+                updated: Date(timeIntervalSince1970: 100), tags: ["Video", "Everyone"],
+                creatorID: steamID)
+        }
+        workshop.showAuthorForLayoutTest(author, works: works)
+        let view = WorkshopAuthorSheet(model: workshop, library: library)
+        let size = NSHostingView(rootView: view).fittingSize
+        #expect(size.width <= 1200 && size.height <= 760, "作者面板太大：\(size)")
+        let window = Self.host(view, size: CGSize(width: 1100, height: 700))
+        defer { window.close() }
+        try? await Task.sleep(for: .milliseconds(250))
+        window.contentView?.layoutSubtreeIfNeeded()
+        Self.snapshot(window, name: "workshop-author")
+        let bounds = try #require(window.contentView).bounds
+        for element in Self.elements(in: window) {
+            let frame = element.frame.insetBy(dx: 0.5, dy: 0.5)
+            #expect(frame.minX >= 0 && frame.maxX <= bounds.maxX && frame.minY >= 0 && frame.maxY <= bounds.maxY,
+                    "\(element.name) 超出作者面板 \(element.frame.integral)")
+        }
     }
 }

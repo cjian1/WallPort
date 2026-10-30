@@ -182,6 +182,23 @@ struct WorkshopGallery: View {
     /// 右键菜单：按条目现在的状态给能做的事
     @ViewBuilder
     private func menu(for item: WorkshopItem, isLocal: Bool, isSubscribed: Bool) -> some View {
+        if let state = model.state(of: item.id) {
+            switch state {
+            case .waiting:
+                Button("优先下载") { model.prioritizeDownload(item.id) }
+                Button("暂停下载") { model.pauseDownload(item.id) }
+            case .downloading:
+                Button("暂停下载") { model.pauseDownload(item.id) }
+            case .paused:
+                Button("继续下载") { model.resumeDownload(item.id) }
+            case .done, .failed:
+                EmptyView()
+            }
+            if state != .done {
+                Button("取消下载") { model.cancelDownload(item.id) }
+            }
+            Divider()
+        }
         if isLocal {
             Button("设为壁纸") { library.applyWorkshopItem(item.id) }
         } else if isSubscribed {
@@ -232,13 +249,16 @@ struct WorkshopCard: View {
     /// 下载中：在预览图上盖一层，显示百分比和进度条
     @ViewBuilder
     private var downloadOverlay: some View {
-        if state == .downloading || state == .waiting {
+        if state == .downloading || state == .waiting || state == .paused {
             ZStack {
                 Color.black.opacity(0.5)
                 VStack(spacing: 6) {
                     if state == .waiting {
                         Image(systemName: "clock").font(.title3)
                         Text("等待下载").font(.caption.bold())
+                    } else if state == .paused {
+                        Image(systemName: "pause.fill").font(.title3)
+                        Text("已暂停").font(.caption.bold())
                     } else if let progress {
                         Text("\(Int((progress * 100).rounded(.down)))%").font(.title2.bold()).monospacedDigit()
                         ProgressView(value: progress).progressViewStyle(.linear).tint(.white).frame(width: 130)
@@ -254,7 +274,7 @@ struct WorkshopCard: View {
 
     @ViewBuilder
     private var badge: some View {
-        if state == .downloading || state == .waiting {
+        if state == .downloading || state == .waiting || state == .paused {
             EmptyView()
         } else if isLocal {
             Label("已下载", systemImage: "checkmark.circle.fill").badgeStyle(.green)
@@ -435,6 +455,12 @@ struct WorkshopItemPanel: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                     Text(item.title).font(.title3.bold()).lineLimit(3)
                     Text(details(item)).font(.callout).foregroundStyle(.secondary)
+                    if let creatorID = item.creatorID {
+                        HStack(spacing: 6) {
+                            Text(String(localized: "作者")).foregroundStyle(.secondary)
+                            WorkshopAuthorLink(model: model, steamID: creatorID)
+                        }
+                    }
                     if !item.tags.isEmpty {
                         Text(item.tags.map { WallpaperRating(tag: $0)?.title ?? $0 }.joined(separator: " · "))
                             .font(.caption).foregroundStyle(.secondary)
@@ -467,6 +493,11 @@ struct WorkshopItemPanel: View {
         let state = model.state(of: item.id)
         if state == .waiting {
             HStack { ProgressView().controlSize(.small); Text("等待下载…") }
+            HStack {
+                Button("优先下载") { model.prioritizeDownload(item.id) }
+                Button("暂停") { model.pauseDownload(item.id) }
+                Button("取消下载", role: .destructive) { model.cancelDownload(item.id) }
+            }
         } else if state == .downloading {
             if let progress = model.progress[item.id] {
                 VStack(alignment: .leading, spacing: 4) {
@@ -475,6 +506,16 @@ struct WorkshopItemPanel: View {
                 }
             } else {
                 HStack { ProgressView().controlSize(.small); Text("正在准备下载…") }
+            }
+            HStack {
+                Button("暂停") { model.pauseDownload(item.id) }
+                Button("取消下载", role: .destructive) { model.cancelDownload(item.id) }
+            }
+        } else if state == .paused {
+            Label("已暂停下载", systemImage: "pause.circle.fill").foregroundStyle(.secondary)
+            HStack {
+                Button("继续下载") { model.resumeDownload(item.id) }
+                Button("取消下载", role: .destructive) { model.cancelDownload(item.id) }
             }
         } else if model.isLocal(item.id) {
             Label("已在壁纸库", systemImage: "checkmark.circle.fill").foregroundStyle(Color.accentColor)
@@ -529,7 +570,7 @@ struct WorkshopStatusBar: View {
             if ((model.isSyncing || model.isDownloading) && !model.isPaused) || model.engineAssetsProgress != nil {
                 ProgressView().controlSize(.small)
             }
-            if model.pendingCount > 0 {
+            if model.scheduledCount > 0 || model.isPaused {
                 if model.isPaused {
                     Button("继续") { model.resumeDownloads() }
                         .help("接着下载剩下的 \(model.pendingCount) 个")
@@ -582,9 +623,13 @@ struct WorkshopStatusBar: View {
         let waiting = model.pendingCount
         if waiting > 0 {
             if model.isPaused { return String(localized: "Steam 创意工坊：已暂停，还有 \(waiting) 个没下") }
-            let current = model.queue.first { $0.state == .downloading }.flatMap { model.progress[$0.id] }
-            guard let current else { return String(localized: "Steam 创意工坊：还有 \(waiting) 个在下载") }
-            return String(localized: "Steam 创意工坊：还有 \(waiting) 个在下载（当前 \(Int((current * 100).rounded(.down)))%）")
+            if let current = model.queue.first(where: { $0.state == .downloading }).flatMap({ model.progress[$0.id] }) {
+                return String(localized: "Steam 创意工坊：还有 \(waiting) 个没下（当前 \(Int((current * 100).rounded(.down)))%）")
+            }
+            if model.scheduledCount == 0, model.itemPausedCount > 0 {
+                return String(localized: "Steam 创意工坊：\(model.itemPausedCount) 个已暂停")
+            }
+            return String(localized: "Steam 创意工坊：还有 \(waiting) 个没下")
         }
         return model.isLoggedIn ? String(localized: "Steam 创意工坊：已登录") : String(localized: "Steam 创意工坊：未登录（可以浏览，订阅和下载要登录）")
     }

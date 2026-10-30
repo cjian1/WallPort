@@ -973,10 +973,13 @@
 "Steam 创意工坊：已暂停，还有 %lld 个没下" = "Steam Workshop: paused, %lld remaining";
 
 /* WorkshopViews.swift */
-"Steam 创意工坊：还有 %lld 个在下载" = "Steam Workshop: %lld downloading";
+"Steam 创意工坊：还有 %lld 个没下" = "Steam Workshop: %lld remaining";
 
 /* WorkshopViews.swift */
-"Steam 创意工坊：还有 %lld 个在下载（当前 %lld%%）" = "Steam Workshop: %lld downloading (current %lld%%)";
+"Steam 创意工坊：还有 %lld 个没下（当前 %lld%%）" = "Steam Workshop: %lld remaining (current %lld%%)";
+
+/* WorkshopViews.swift */
+"Steam 创意工坊：%lld 个已暂停" = "Steam Workshop: %lld paused";
 
 /* WorkshopViews.swift */
 "Steam 创意工坊：已登录" = "Steam Workshop: signed in";
@@ -1387,6 +1390,26 @@
 
 /* WorkshopNative.swift */
 "没有权限（这个账号可能没买 Wallpaper Engine，或者条目已被作者设为不公开）" = "Access denied (this account may not own Wallpaper Engine, or the author made the item private)";
+
+/* Workshop queue and author browsing */
+"优先下载" = "Download First";
+"作者" = "Author";
+"作者的其他创意工坊作品" = "More Workshop Items by This Author";
+"作者编号不对" = "Invalid author ID";
+"取消下载" = "Cancel Download";
+"已暂停" = "Paused";
+"已暂停下载" = "Download paused";
+"打开作者主页" = "Open Author Profile";
+"暂停下载" = "Pause Download";
+"查看这个作者的其他作品" = "View more items by this author";
+"正在读取作者作品…" = "Loading this author’s items…";
+"继续下载" = "Resume Download";
+"读取作者作品失败：%@" = "Couldn’t load this author’s items: %@";
+"这个作者没有其他公开作品。" = "This author has no other public items.";
+"正在下载「%@」需要的基础壁纸…" = "Downloading the base wallpaper required by “%@”…";
+"「%@」需要的基础壁纸没下载成功：%@。在壁纸库里重新选它会再试一次。" = "The base wallpaper required by “%@” couldn’t be downloaded: %@. Choose it again in the Library to retry.";
+"「%@」要先下载它需要的基础壁纸：请打开壁纸库登录 Steam，登录后会自动下载。" = "“%@” needs its base wallpaper first: open the Library and sign in to Steam, and it will download automatically.";
+"预设" = "Preset";
 
 /* WorkshopNative.swift */
 "读不到条目详情（Steam 返回 %u）" = "Couldn’t read item details (Steam returned %u)";

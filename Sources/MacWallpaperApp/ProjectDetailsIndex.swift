@@ -109,8 +109,8 @@ actor ProjectDetailsIndex {
     /// 场景画布：`general.orthogonalprojection` 的宽高；写 `auto` 或是 3D（透视）场景的，按"自适应"算
     static func sceneSize(_ project: WallpaperProject) -> (width: Int?, height: Int?, dynamic: Bool)? {
         let name = project.entry?.lastPathComponent ?? "scene.json"
-        var data = try? Data(contentsOf: project.folder.appendingPathComponent(name))
-        if data == nil, let package = try? ScenePackage(contentsOf: project.folder.appendingPathComponent("scene.pkg")) {
+        var data = try? Data(contentsOf: project.contentFolder.appendingPathComponent(name))
+        if data == nil, let package = try? ScenePackage(contentsOf: project.contentFolder.appendingPathComponent("scene.pkg")) {
             data = package.contents(of: name)
         }
         guard let data, let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

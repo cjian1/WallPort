@@ -259,7 +259,7 @@ final class LibraryModel: ObservableObject {
     private func sceneInfo(_ project: WallpaperProject) -> (elements: [SceneElement], hasSound: Bool) {
         let key = Self.key(project.folder)
         if let cached = sceneCache[key] { return cached }
-        let package = try? ScenePackage(contentsOf: project.folder.appendingPathComponent("scene.pkg"))
+        let package = try? ScenePackage(contentsOf: project.contentFolder.appendingPathComponent("scene.pkg"))
         let json = package?.contents(of: "scene.json")
         let info = (
             elements: json.map(SceneElements.list(sceneJSON:)) ?? [],
@@ -353,7 +353,8 @@ final class LibraryModel: ObservableObject {
 
     /// macOS 上放不了的类型（应用程序类、认不出来的）
     func isSupported(_ project: WallpaperProject) -> Bool {
-        project.kind == .scene || project.kind == .video || project.kind == .web || project.kind == .image
+        project.isDependencyBackedPreset
+            || project.kind == .scene || project.kind == .video || project.kind == .web || project.kind == .image
     }
 
     /// 设置能生效的类型：场景按属性重建，网页走 applyUserProperties；视频和图片有显示方式
@@ -537,6 +538,7 @@ struct LibraryView: View {
         }
         .frame(minWidth: 880, minHeight: 520)
         .modifier(SteamLoginSheetHost(workshop: workshop))
+        .modifier(WorkshopAuthorSheetHost(model: workshop, library: model))
         // 真正切到创意工坊时才加载网格、没登录时弹登录框（工坊页一直在视图树里，不能靠它自己的 onAppear）
         .onAppear { if model.mode == .workshop { workshop.activate() } }
         .onChange(of: model.mode) { if model.mode == .workshop { workshop.activate() } }
@@ -856,6 +858,9 @@ struct LibraryCard: View {
     var isSelected = false
 
     private var kindLabel: String {
+        if project.kind == .unknown, project.isDependencyBackedPreset {
+            return String(localized: "预设")
+        }
         switch project.kind {
         case .scene: return String(localized: "场景")
         case .video: return String(localized: "视频")
@@ -867,6 +872,7 @@ struct LibraryCard: View {
     }
 
     private var symbol: String {
+        if project.kind == .unknown, project.isDependencyBackedPreset { return "wand.and.stars" }
         switch project.kind {
         case .scene: return "square.stack.3d.up"
         case .video: return "film"
