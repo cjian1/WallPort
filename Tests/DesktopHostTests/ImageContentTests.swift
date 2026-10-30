@@ -54,4 +54,32 @@ import Testing
             in: bounds, imageSize: image, fitsWhole: true, position: 1)
         #expect(whole == CGRect(x: 0, y: 25, width: 100, height: 50))
     }
+
+    /// 已经显示着的图片改显示方式要当场挪，不用重新载入（拖"画面位置"滑块时就是这样调用的）
+    @Test func movesLoadedImageWhenDisplayChanges() async throws {
+        let url = try makePNG()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let log = EventLog(fileURL: root.appendingPathComponent("test.log"))
+        let content = ImageContent(url: url, label: "测试屏", log: log) { _ in
+            Issue.record("有效 PNG 不应载入失败")
+        }
+        await withCheckedContinuation { continuation in
+            content.whenReady { continuation.resume() }
+        }
+        let adjustable: any FramingAdjustable = content
+        content.view.frame = CGRect(x: 0, y: 0, width: 4, height: 4)
+        content.view.layoutSubtreeIfNeeded()
+        let imageLayer = try #require(content.view.layer?.sublayers?.first)
+        #expect(imageLayer.frame == CGRect(x: -2, y: 0, width: 8, height: 4))
+
+        adjustable.setDisplay(fitsWhole: false, position: 0)
+        content.view.layoutSubtreeIfNeeded()
+        #expect(imageLayer.frame == CGRect(x: 0, y: 0, width: 8, height: 4))
+        adjustable.setDisplay(fitsWhole: false, position: 1)
+        content.view.layoutSubtreeIfNeeded()
+        #expect(imageLayer.frame == CGRect(x: -4, y: 0, width: 8, height: 4))
+        adjustable.setDisplay(fitsWhole: true, position: 1)
+        content.view.layoutSubtreeIfNeeded()
+        #expect(imageLayer.frame == CGRect(x: 0, y: 1, width: 4, height: 2))
+    }
 }

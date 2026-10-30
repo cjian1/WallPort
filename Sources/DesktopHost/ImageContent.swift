@@ -3,7 +3,7 @@ import ImageIO
 
 /// 静态图片壁纸：PNG / JPEG 在后台按屏幕尺寸采样解码，铺满时可按比例裁切并调整露出位置。
 @MainActor
-public final class ImageContent: DesktopContent {
+public final class ImageContent: DesktopContent, FramingAdjustable {
     public let view: NSView
     public let url: URL
     /// 图片不受可见性影响，离开屏幕也能返回已解码的画面给锁屏 / 屏保同步。

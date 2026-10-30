@@ -4,7 +4,7 @@ import DesktopHost
 
 /// 视频壁纸：硬件解码、无缝循环，默认静音（菜单里打开"播放壁纸声音"才出声）。什么时候暂停由 PlaybackGate 决定。
 @MainActor
-public final class VideoContent: DesktopContent, UserPausable, AudioPlaying {
+public final class VideoContent: DesktopContent, UserPausable, AudioPlaying, FramingAdjustable {
     public let view: NSView
     public let url: URL
     public var isPausedByUser: Bool { gate.isPausedByUser }

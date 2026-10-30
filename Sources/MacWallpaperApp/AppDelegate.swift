@@ -369,7 +369,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.failedImages[entry] = reason
                 Task { [weak self] in self?.controller?.reloadContent(for: display.id) }
             }
-            image.setDisplay(fitsWhole: options.fitsWhole, position: Float(options.clampedPosition))
+            apply(options, to: image)
             return image
         case .application:
             return makeTestPattern(for: display, notice: String(localized: "「\(project.title)」是应用程序类壁纸，macOS 上无法运行"))
@@ -1835,11 +1835,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// 壁纸自己的静音、音量（菜单栏的"播放壁纸声音"是总开关）；视频的显示方式也在这里设
-    private func apply(_ options: WallpaperOptions, to content: any AudioPlaying) {
-        content.setAudioEnabled(playAudio && !options.isMuted)
-        content.setVolume(Float(options.volume))
-        (content as? VideoContent)?.setDisplay(fitsWhole: options.fitsWhole, position: Float(options.clampedPosition))
+    /// 壁纸自己的静音、音量（菜单栏的"播放壁纸声音"是总开关）；视频、图片的显示方式也在这里设
+    private func apply(_ options: WallpaperOptions, to content: any DesktopContent) {
+        if let audible = content as? any AudioPlaying {
+            audible.setAudioEnabled(playAudio && !options.isMuted)
+            audible.setVolume(Float(options.volume))
+        }
+        (content as? any FramingAdjustable)?.setDisplay(
+            fitsWhole: options.fitsWhole, position: Float(options.clampedPosition))
     }
 
     private func optionsDidChange(_ project: WallpaperProject, options: WallpaperOptions) {
@@ -1855,9 +1858,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         for display in displays(showing: project) {
             guard let content = controller?.content(for: display.id) else { continue }
-            if let audible = content as? any AudioPlaying { apply(options, to: audible) }
-            // 场景的取景在构建时定（特效缓冲、屏幕投影都按它算），换了显示方式要重建；拖滑块时等停手再建
-            if displayChanged, content is SceneContent { scheduleSceneRebuild(project) }
+            apply(options, to: content)
+            guard displayChanged else { continue }
+            if content is any FramingAdjustable {
+                // 视频、图片上面已经当场换好；同步成系统壁纸的那张也跟着换，拖滑块时只截停手后那次
+                controller?.contentAppearanceDidChange(for: display.id)
+            } else if content is SceneContent {
+                // 场景的取景在构建时定（特效缓冲、屏幕投影都按它算），换了显示方式要重建；拖滑块时等停手再建
+                scheduleSceneRebuild(project)
+            }
         }
     }
 

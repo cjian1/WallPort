@@ -499,6 +499,13 @@ public final class WallpaperController: NSObject {
         for (id, slot) in slots { scheduleSnapshot(for: id, content: slot.content, delay: .zero) }
     }
 
+    /// 这块显示器上的内容当场变了样子（视频、图片换了显示方式）：按常规的延迟重新截一张同步成系统壁纸。
+    /// 连着变（拖滑块）时每次都把上一次排的取消掉，只截停手后的那一张
+    public func contentAppearanceDidChange(for id: CGDirectDisplayID) {
+        guard let slot = slots[id] else { return }
+        scheduleSnapshot(for: id, content: slot.content)
+    }
+
     /// 立刻按**此刻**的画面重新设一次系统壁纸，不等常规那 3 秒。锁屏、睡眠前、屏保启动时用：
     /// 动态壁纸一直在变，上一次同步的那一帧早就过时了，而锁屏上看到的就是系统壁纸。
     /// 网页被藏起来时可能截到空白，跳过它、保住上一次设上去的画面

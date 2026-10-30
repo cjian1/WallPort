@@ -52,6 +52,13 @@ extension DesktopContent {
     public var snapshotsWhileHidden: Bool { false }
 }
 
+/// 不用重建就能换显示方式的内容（视频、图片）。场景不算：它的取景在建渲染器时就定了，换了要重建
+@MainActor
+public protocol FramingAdjustable: DesktopContent {
+    /// 完整显示（比例不同的方向两边留黑）或铺满；`position` 是铺满时被裁方向上看哪一部分，0 最左 / 最上，1 最右 / 最下
+    func setDisplay(fitsWhole: Bool, position: Float)
+}
+
 /// "不放动态壁纸"：这块屏幕显示用户原来的系统壁纸（壁纸库还是空的、或者用户选了不放）。
 /// 视图是透明的、什么也不画；窗口也保持全透明，桌面上露出来的就是系统自己的壁纸
 public final class SystemWallpaperContent: DesktopContent {
