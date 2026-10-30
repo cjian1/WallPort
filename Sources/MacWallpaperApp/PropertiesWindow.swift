@@ -1,4 +1,5 @@
 import AppKit
+import DesktopHost
 import SwiftUI
 import WallpaperFormats
 import WallpaperLibrary
@@ -201,23 +202,31 @@ struct PropertiesView: View {
     }
 }
 
-/// 播放选项要显示哪些：有没有声音、菜单栏的总开关、铺满会裁掉多少
+/// 播放选项要显示哪些：有没有声音、菜单栏的总开关、铺满会裁掉多少、能不能等比缩放、是不是幻灯片
 struct PlaybackOptionsContext {
     var hasAudio = false
     var playsAudio = true
     var crop: LibraryModel.Crop?
+    /// 图片、视频、幻灯片可以等比缩小 / 放大（场景的取景在构建时定，暂不支持）
+    var supportsScale = false
+    /// 带图片文件夹的网页预设：壁坞能自己放的图片张数；不是幻灯片时为 nil
+    var slideshowImageCount: Int?
     var onEnableAudio: () -> Void = {}
 
-    var showsAnything: Bool { hasAudio || crop != nil }
+    var showsAnything: Bool { hasAudio || crop != nil || supportsScale || slideshowImageCount != nil }
 }
 
-/// 壁坞自己加的两节：声音（这个壁纸静音 / 音量）、显示（铺满或完整显示、铺满时看哪一部分）
+/// 壁坞自己加的几节：声音（这个壁纸静音 / 音量）、幻灯片（壁坞自己放时的间隔和顺序）、
+/// 显示（铺满或完整显示、看哪一部分、等比缩放）
 struct PlaybackOptionsSections: View {
     @Binding var options: WallpaperOptions
     let context: PlaybackOptionsContext
 
+    /// 幻灯片由壁坞自己放（这时网页不运行：没有声音，显示方式由壁坞管）
+    private var playsSlidesNatively: Bool { context.slideshowImageCount != nil && options.playsSlidesNatively }
+
     var body: some View {
-        if context.hasAudio {
+        if context.hasAudio && !playsSlidesNatively {
             Section {
                 Toggle("播放声音", isOn: Binding(get: { !options.isMuted }, set: { options.isMuted = !$0 }))
                 VStack(alignment: .leading, spacing: 4) {
@@ -241,21 +250,54 @@ struct PlaybackOptionsSections: View {
                 }
             }
         }
-        if let crop = context.crop {
+        if let count = context.slideshowImageCount {
             Section {
-                Picker("显示方式", selection: $options.fitsWhole) {
-                    Text("铺满屏幕").tag(false)
-                    Text("完整显示").tag(true)
+                Toggle("由壁坞播放", isOn: $options.playsSlidesNatively)
+                if options.playsSlidesNatively {
+                    SlideIntervalRow(seconds: $options.slideInterval)
+                    Toggle("随机顺序", isOn: $options.shufflesSlides)
                 }
-                if !options.fitsWhole {
+            } header: {
+                Text("幻灯片")
+            } footer: {
+                Text(options.playsSlidesNatively
+                    ? "壁坞直接轮流显示这个壁纸的 \(count) 张图片，下面的“显示”对每一张都有效。网页里的音频圆环、时钟等效果不显示，作者设置里的切换频率也不起作用。"
+                    : "按网页原样播放：切换频率用作者设置里的，只能按分钟；图片按网页自己的方式铺满。")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        // 铺满 / 完整显示：比例和屏幕不同的场景、视频、图片，以及壁坞放的幻灯片（每张比例都可能不同）
+        let choosesFraming = context.crop != nil || playsSlidesNatively
+        let scales = context.supportsScale && (context.slideshowImageCount == nil || playsSlidesNatively)
+        if choosesFraming || scales {
+            Section {
+                if choosesFraming {
+                    Picker("显示方式", selection: $options.fitsWhole) {
+                        Text("铺满屏幕").tag(false)
+                        Text("完整显示").tag(true)
+                    }
+                }
+                // 有超出屏幕的方向时才用得着选看哪一部分：铺满时被裁的方向，或者放大以后
+                if (choosesFraming && !options.fitsWhole) || options.clampedScale > 1 {
+                    positionSlider
+                }
+                if scales {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(crop.axis == .vertical ? "上下位置" : "左右位置")
-                        Slider(value: $options.position, in: 0...1) {
-                            Text(crop.axis == .vertical ? "上下位置" : "左右位置")
+                        HStack {
+                            Text("缩放")
+                            Spacer()
+                            Text("\(Int((options.clampedScale * 100).rounded()))%").monospacedDigit()
+                        }
+                        // 取整到 5%（不用 step：那样滑块下面会画一排刻度点）
+                        Slider(
+                            value: Binding(get: { options.scale }, set: { options.scale = ($0 * 20).rounded() / 20 }),
+                            in: Framing.scaleRange
+                        ) {
+                            Text("缩放")
                         } minimumValueLabel: {
-                            Text(crop.axis == .vertical ? "上" : "左").foregroundStyle(.secondary)
+                            Text("小").foregroundStyle(.secondary)
                         } maximumValueLabel: {
-                            Text(crop.axis == .vertical ? "下" : "右").foregroundStyle(.secondary)
+                            Text("大").foregroundStyle(.secondary)
                         }
                         .labelsHidden()
                     }
@@ -263,11 +305,75 @@ struct PlaybackOptionsSections: View {
             } header: {
                 Text("显示")
             } footer: {
-                Text(options.fitsWhole
-                    ? "整张壁纸都在屏幕上，比例不同的方向两边留黑边。"
-                    : "壁纸和屏幕的比例不同，铺满时只看得到约 \(Int((crop.visible * 100).rounded()))%，用上面的滑块选看哪一部分。")
-                    .font(.footnote).foregroundStyle(.secondary)
+                Text(displayFooter).font(.footnote).foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// 被裁的方向知道时写"左右位置 / 上下位置"；幻灯片每张比例不同、或者放大后两个方向都超出时写"画面位置"
+    @ViewBuilder
+    private var positionSlider: some View {
+        let axis = options.fitsWhole || playsSlidesNatively ? nil : context.crop?.axis
+        let title: LocalizedStringKey = axis == .vertical ? "上下位置" : axis == .horizontal ? "左右位置" : "画面位置"
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+            Slider(value: $options.position, in: 0...1) {
+                Text(title)
+            } minimumValueLabel: {
+                Text(axis == .vertical ? "上" : axis == .horizontal ? "左" : "左上").foregroundStyle(.secondary)
+            } maximumValueLabel: {
+                Text(axis == .vertical ? "下" : axis == .horizontal ? "右" : "右下").foregroundStyle(.secondary)
+            }
+            .labelsHidden()
+        }
+    }
+
+    private var displayFooter: LocalizedStringKey {
+        if playsSlidesNatively {
+            return options.fitsWhole
+                ? "每张图片都整张放进屏幕，比例不同的方向留黑边；缩放在这个基础上再等比放大或缩小。"
+                : "每张图片都铺满屏幕，多出来的裁掉；缩放在这个基础上再等比放大或缩小。"
+        }
+        if let crop = context.crop {
+            return options.fitsWhole
+                ? "整张壁纸都在屏幕上，比例不同的方向两边留黑边。"
+                : "壁纸和屏幕的比例不同，铺满时只看得到约 \(Int((crop.visible * 100).rounded()))%，用上面的滑块选看哪一部分。"
+        }
+        return "按比例放大或缩小整个画面，宽高比例不变；缩小后四周留黑边。"
+    }
+}
+
+/// 幻灯片切换间隔：数字加单位（秒 / 分钟），存的是秒
+private struct SlideIntervalRow: View {
+    @Binding var seconds: Double
+
+    private enum Unit: Hashable { case seconds, minutes }
+
+    private var unit: Unit { seconds >= 60 && Int(seconds) % 60 == 0 ? .minutes : .seconds }
+    private var amount: Int { unit == .minutes ? Int(seconds) / 60 : Int(seconds) }
+
+    var body: some View {
+        HStack {
+            Text("切换间隔")
+            Spacer()
+            TextField("切换间隔", value: Binding(get: { amount }, set: { set(amount: $0, unit: unit) }), format: .number)
+                .labelsHidden()
+                .multilineTextAlignment(.trailing)
+                .frame(width: 48)
+            Stepper("切换间隔", value: Binding(get: { amount }, set: { set(amount: $0, unit: unit) }), in: 1...999)
+                .labelsHidden()
+            Picker("单位", selection: Binding(get: { unit }, set: { set(amount: amount, unit: $0) })) {
+                Text("秒").tag(Unit.seconds)
+                Text("分钟").tag(Unit.minutes)
+            }
+            .labelsHidden()
+            .fixedSize()
+        }
+    }
+
+    /// 秒最少 2（比淡入淡出短就看不清），最多 999 秒 / 分钟
+    private func set(amount: Int, unit: Unit) {
+        let amount = min(max(amount, unit == .seconds ? Int(SlideshowContent.minimumInterval) : 1), 999)
+        seconds = Double(unit == .minutes ? amount * 60 : amount)
     }
 }

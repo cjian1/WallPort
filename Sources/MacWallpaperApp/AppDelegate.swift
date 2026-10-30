@@ -23,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var failedImages: [URL: String] = [:]
     /// 运行中载入失败的场景（按项目文件夹）和原因。重新选择这个项目或换素材目录时清除
     private var failedScenes: [String: String] = [:]
+    /// 壁坞自己放不了的幻灯片（图片都解不出来）和原因，这时改用网页放。重新选这个项目时清除
+    private var failedSlideshows: [String: String] = [:]
     /// 载入场景前记一笔、平稳跑过一阵再擦掉：壁坞在这期间崩了的话，下次启动先不载入那张（见 CrashGuard）
     private lazy var crashGuard = CrashGuard(file: AppFolder.data.appendingPathComponent("loading-scenes.json"))
     /// 场景载入后多久算"平稳"（构建加上头几秒的渲染；坏文件引起的崩溃几乎都在这段时间里）
@@ -296,6 +298,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return video
     }
 
+    /// 壁坞自己放的幻灯片。图片都解不出来时记下来、改用网页放（重新选这个壁纸时再试）
+    private func makeSlideshow(
+        _ images: [URL], project: WallpaperProject, for display: DisplaySnapshot, options: WallpaperOptions
+    ) -> any DesktopContent {
+        let key = Self.key(project.folder)
+        let slideshow = SlideshowContent(
+            files: images, interval: options.clampedSlideInterval, shuffles: options.shufflesSlides,
+            label: "显示器 \(display.id)", log: log, targetPixelSize: display.pixelSize
+        ) { [weak self] reason in
+            self?.failedSlideshows[key] = reason
+            Task { [weak self] in self?.controller?.reloadContent(for: display.id) }
+        }
+        slideshow.setPausedByUser(isGloballyPaused || isPausedByPower || pausedDisplays.contains(display.id))
+        apply(options, to: slideshow)
+        return slideshow
+    }
+
     private func makeProjectContent(_ folder: URL, for display: DisplaySnapshot) -> any DesktopContent {
         guard let loaded = projects[Self.key(folder)] else {
             loadProject(folder, thenReload: display.id)
@@ -340,6 +359,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .video:
             return makeVideo(entry, for: display, options: optionsStore.options(for: project.folder))
         case .web:
+            // 带图片文件夹的幻灯片（例如"完美壁纸"的幻灯片预设）：壁坞自己放，切换间隔、缩放都能调；关掉就按网页原样
+            let options = optionsStore.options(for: project.folder)
+            if options.playsSlidesNatively, failedSlideshows[Self.key(project.folder)] == nil {
+                let images = project.slideshowImages(overrides: propertyStore.overrides(for: project.folder))
+                if !images.isEmpty { return makeSlideshow(images, project: project, for: display, options: options) }
+            }
             // 开发用：设置了这个环境变量时，网页壁纸加载完会测帧率并截图到该目录
             let captureDirectory = ProcessInfo.processInfo.environment["MACWALLPAPER_CAPTURE_DIR"]
             let web = WebContent(
@@ -348,7 +373,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 allowNetwork: allowWebNetwork, label: "显示器 \(display.id)", log: log,
                 debugCapture: captureDirectory.map {
                     URL(fileURLWithPath: $0).appendingPathComponent("display-\(display.id).png")
-                })
+                },
+                // 依赖型预设的幻灯片文件夹在预设自己的文件夹里（页面在基础项目里）
+                propertyFolder: project.folder)
             web.setPausedByUser(isGloballyPaused || isPausedByPower || pausedDisplays.contains(display.id))
             apply(optionsStore.options(for: project.folder), to: web)
             applyPerformanceSettings(to: web)
@@ -482,10 +509,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let playlistMenu = NSMenu()
         playlistMenu.addItem(makeItem(playlist.isEnabled ? String(localized: "关闭轮播") : String(localized: "开启轮播"), #selector(togglePlaylist)))
         playlistMenu.addItem(.separator())
-        for minutes in [5, 10, 15, 30, 60, 120] {
-            let item = makeItem(String(localized: "每 \(minutes) 分钟换一张"), #selector(selectPlaylistInterval(_:)))
-            item.representedObject = NSNumber(value: minutes)
-            item.state = playlist.intervalMinutes == minutes ? .on : .off
+        for seconds in [10, 30, 60, 5 * 60, 10 * 60, 15 * 60, 30 * 60, 60 * 60, 120 * 60] {
+            let title = seconds < 60
+                ? String(localized: "每 \(seconds) 秒换一张") : String(localized: "每 \(seconds / 60) 分钟换一张")
+            let item = makeItem(title, #selector(selectPlaylistInterval(_:)))
+            item.representedObject = NSNumber(value: seconds)
+            item.state = playlist.intervalSeconds == seconds ? .on : .off
             playlistMenu.addItem(item)
         }
         playlistMenu.addItem(.separator())
@@ -755,6 +784,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if let entry = project.entry { failedVideos[entry] = nil }
             if let entry = project.entry, project.kind == .image { failedImages[entry] = nil }
             failedScenes[Self.key(project.folder)] = nil
+            failedSlideshows[Self.key(project.folder)] = nil
             projects[Self.key(project.folder)] = .success(project)
             assignments.setSource(.project(project.folder), forDisplay: display.stableKey)
             log.write("显示器 \(display.id) 改用项目「\(project.title)」（\(project.kind.rawValue)）：\(project.folder.path)")
@@ -817,22 +847,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         powerMonitor.start()
     }
 
-    /// 开启后每分钟检查一次到没到时间；到点把"当前用着项目壁纸"的显示器换成下一张
+    /// 开启后定时检查到没到时间（间隔按秒设时检查得勤一些，最多一分钟一次）；
+    /// 到点把"当前用着项目壁纸"的显示器换成下一张
     private func configurePlaylistTimer() {
         playlistTimer?.invalidate()
         playlistTimer = nil
         guard playlist.isEnabled else { return }
         lastRotation = Date()
-        let timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        let check = min(60, max(1, Double(playlist.intervalSeconds) / 4))
+        let timer = Timer.scheduledTimer(withTimeInterval: check, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.rotateIfDue() }
         }
-        timer.tolerance = 10
+        timer.tolerance = check / 6
         playlistTimer = timer
     }
 
     private func rotateIfDue() {
         guard playlist.isEnabled else { return }
-        let interval = Double(playlist.intervalMinutes) * 60
+        let interval = Double(playlist.intervalSeconds)
         guard Date().timeIntervalSince(lastRotation) >= interval else { return }
         lastRotation = Date()
         rotateWallpapers()
@@ -864,7 +896,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             apply(next, to: display, reportFailure: false)
             switched += 1
         }
-        log.write("轮播：\(switched) 块显示器换了壁纸（\(playlist.mode.title)，每 \(playlist.intervalMinutes) 分钟）")
+        log.write("轮播：\(switched) 块显示器换了壁纸（\(playlist.mode.title)，每 \(playlist.intervalText)）")
     }
 
     @objc private func openLibrary(_ sender: NSMenuItem) {
@@ -1106,17 +1138,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var settings = playlist
         settings.isEnabled.toggle()
         playlist = settings
-        log.write("轮播：\(settings.isEnabled ? "开启（每 \(settings.intervalMinutes) 分钟）" : "关闭")")
+        log.write("轮播：\(settings.isEnabled ? "开启（每 \(settings.intervalText)）" : "关闭")")
         configurePlaylistTimer()
     }
 
     @objc private func selectPlaylistInterval(_ sender: NSMenuItem) {
-        guard let minutes = sender.representedObject as? NSNumber else { return }
+        guard let seconds = sender.representedObject as? NSNumber else { return }
         var settings = playlist
-        settings.intervalMinutes = minutes.intValue
+        settings.intervalSeconds = seconds.intValue
         settings.isEnabled = true
         playlist = settings
-        log.write("轮播：每 \(settings.intervalMinutes) 分钟换一张")
+        log.write("轮播：每 \(settings.intervalText)换一张")
         configurePlaylistTimer()
     }
 
@@ -1897,14 +1929,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// 壁纸自己的静音、音量（菜单栏的"播放壁纸声音"是总开关）；视频、图片的显示方式也在这里设
+    /// 壁纸自己的静音、音量（菜单栏的"播放壁纸声音"是总开关）；视频、图片、幻灯片的显示方式，幻灯片的间隔和顺序也在这里设
     private func apply(_ options: WallpaperOptions, to content: any DesktopContent) {
         if let audible = content as? any AudioPlaying {
             audible.setAudioEnabled(playAudio && !options.isMuted)
             audible.setVolume(Float(options.volume))
         }
         (content as? any FramingAdjustable)?.setDisplay(
-            fitsWhole: options.fitsWhole, position: Float(options.clampedPosition))
+            fitsWhole: options.fitsWhole, position: Float(options.clampedPosition), scale: Float(options.clampedScale))
+        if let slideshow = content as? SlideshowContent {
+            slideshow.setInterval(options.clampedSlideInterval)
+            slideshow.setShuffles(options.shufflesSlides)
+        }
     }
 
     private func optionsDidChange(_ project: WallpaperProject, options: WallpaperOptions) {
@@ -1915,11 +1951,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             log.write("「\(project.title)」\(options.isMuted ? "静音" : "取消静音")")
         }
         let displayChanged = options.fitsWhole != previous.fitsWhole || options.position != previous.position
+            || options.scale != previous.scale
         if displayChanged {
-            log.write("「\(project.title)」显示方式：\(options.fitsWhole ? "完整显示" : String(format: "铺满，画面位置 %.2f", options.position))")
+            let framing = options.fitsWhole ? "完整显示" : String(format: "铺满，画面位置 %.2f", options.position)
+            log.write("「\(project.title)」显示方式：\(framing)\(String(format: "，缩放 %.0f%%", options.clampedScale * 100))")
+        }
+        if options.shufflesSlides != previous.shufflesSlides {
+            log.write("「\(project.title)」幻灯片：\(options.shufflesSlides ? "随机顺序" : "按顺序")")
+        }
+        // 换了播放方式（壁坞放幻灯片 / 网页原样）：重新载入，上次壁坞放不了的也再试一次
+        let playbackChanged = options.playsSlidesNatively != previous.playsSlidesNatively
+        if playbackChanged {
+            failedSlideshows[Self.key(project.folder)] = nil
+            log.write("「\(project.title)」幻灯片：\(options.playsSlidesNatively ? "由壁坞播放" : "按网页原样播放")")
         }
         for display in displays(showing: project) {
             guard let content = controller?.content(for: display.id) else { continue }
+            if playbackChanged {
+                controller?.reloadContent(for: display.id)
+                continue
+            }
             apply(options, to: content)
             guard displayChanged else { continue }
             if content is any FramingAdjustable {

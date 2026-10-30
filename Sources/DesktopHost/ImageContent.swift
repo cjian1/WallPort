@@ -46,9 +46,10 @@ public final class ImageContent: DesktopContent, FramingAdjustable {
         }
     }
 
-    public func setDisplay(fitsWhole: Bool, position: Float) {
+    public func setDisplay(fitsWhole: Bool, position: Float, scale: Float) {
         imageView.fitsWhole = fitsWhole
         imageView.position = CGFloat(min(max(position, 0), 1))
+        imageView.scale = CGFloat(scale)
     }
 
     public func whenReady(_ handler: @escaping @MainActor () -> Void) {
@@ -63,13 +64,20 @@ public final class ImageContent: DesktopContent, FramingAdjustable {
 
     public func snapshot() async -> CGImage? {
         guard let image else { return nil }
-        guard imageView.fitsWhole || imageView.position != 0.5,
-              targetPixelSize.width > 0, targetPixelSize.height > 0
-        else { return image }
-        let bounds = CGRect(origin: .zero, size: targetPixelSize)
-        let place = Self.imageFrame(
-            in: bounds, imageSize: CGSize(width: image.width, height: image.height),
-            fitsWhole: imageView.fitsWhole, position: imageView.position)
+        return Self.render(
+            image, size: targetPixelSize, fitsWhole: imageView.fitsWhole, position: imageView.position,
+            scale: imageView.scale)
+    }
+
+    /// 按显示方式把图片画成屏幕大小的一帧（同步成系统壁纸用）。铺满、居中、不缩放时系统自己铺满就一样，原样返回
+    nonisolated static func render(
+        _ image: CGImage, size: CGSize, fitsWhole: Bool, position: CGFloat, scale: CGFloat
+    ) -> CGImage {
+        guard fitsWhole || position != 0.5 || scale != 1, size.width > 0, size.height > 0 else { return image }
+        let bounds = CGRect(origin: .zero, size: size)
+        let place = Framing.frame(
+            in: bounds, content: CGSize(width: image.width, height: image.height),
+            fitsWhole: fitsWhole, position: position, scale: scale)
         guard let context = CGContext(
             data: nil, width: Int(bounds.width), height: Int(bounds.height), bitsPerComponent: 8,
             bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
@@ -97,7 +105,8 @@ public final class ImageContent: DesktopContent, FramingAdjustable {
         onFailure(reason)
     }
 
-    private nonisolated static func decode(_ url: URL, targetPixelSize: CGSize) -> CGImage? {
+    /// 按屏幕尺寸采样解码（几千万像素的原图不整张解出来）；幻灯片也用它
+    nonisolated static func decode(_ url: URL, targetPixelSize: CGSize) -> CGImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let longest = Int(max(targetPixelSize.width, targetPixelSize.height))
         let options: [CFString: Any] = [
@@ -108,26 +117,11 @@ public final class ImageContent: DesktopContent, FramingAdjustable {
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
-    /// 图片层在视图坐标里的位置。铺满时按大的比例缩放，`position` 从左上到右下；
-    /// 完整显示时按小的比例缩放并居中。
+    /// 图片层在视图坐标里的位置（见 `Framing`）
     nonisolated static func imageFrame(
-        in bounds: CGRect, imageSize: CGSize, fitsWhole: Bool, position: CGFloat
+        in bounds: CGRect, imageSize: CGSize, fitsWhole: Bool, position: CGFloat, scale: CGFloat = 1
     ) -> CGRect {
-        guard imageSize.width > 0, imageSize.height > 0, bounds.width > 0, bounds.height > 0 else {
-            return bounds
-        }
-        let scale = fitsWhole
-            ? min(bounds.width / imageSize.width, bounds.height / imageSize.height)
-            : max(bounds.width / imageSize.width, bounds.height / imageSize.height)
-        let size = CGSize(
-            width: (imageSize.width * scale).rounded(),
-            height: (imageSize.height * scale).rounded())
-        let spare = CGSize(width: bounds.width - size.width, height: bounds.height - size.height)
-        let along = min(max(position, 0), 1)
-        let x = spare.width <= 0 ? spare.width * along : spare.width / 2
-        // AppKit 的 y 轴向上：0 表示露出图片顶部，因此纵向反向平移。
-        let y = spare.height <= 0 ? spare.height * (1 - along) : spare.height / 2
-        return CGRect(x: x.rounded(), y: y.rounded(), width: size.width, height: size.height)
+        Framing.frame(in: bounds, content: imageSize, fitsWhole: fitsWhole, position: position, scale: scale)
     }
 }
 
@@ -145,6 +139,9 @@ private final class ImageWallpaperView: NSView {
     }
     var position: CGFloat = 0.5 {
         didSet { if position != oldValue { needsLayout = true } }
+    }
+    var scale: CGFloat = 1 {
+        didSet { if scale != oldValue { needsLayout = true } }
     }
 
     override init(frame frameRect: NSRect) {
@@ -173,7 +170,7 @@ private final class ImageWallpaperView: NSView {
         CATransaction.setDisableActions(true)
         let size = image.map { CGSize(width: $0.width, height: $0.height) } ?? bounds.size
         imageLayer.frame = ImageContent.imageFrame(
-            in: bounds, imageSize: size, fitsWhole: fitsWhole, position: position)
+            in: bounds, imageSize: size, fitsWhole: fitsWhole, position: position, scale: scale)
         imageLayer.contentsScale = window?.backingScaleFactor ?? 2
         CATransaction.commit()
     }

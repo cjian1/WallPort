@@ -47,7 +47,7 @@ enum BridgeScript {
         }
       };
 
-      // 媒体集成和目录类属性在 macOS 上暂时没有数据来源，只接受注册，避免页面调用时报错
+      // 媒体集成在 macOS 上暂时没有数据来源，只接受注册，避免页面调用时报错
       for (const name of [
         'wallpaperRegisterMediaStatusListener',
         'wallpaperRegisterMediaPropertiesListener',
@@ -57,7 +57,76 @@ enum BridgeScript {
       ]) {
         window[name] = () => {};
       }
-      window.wallpaperRequestRandomFileForProperty = () => {};
+
+      // 目录类属性（幻灯片文件夹等）：原生一侧载入时交来文件列表，fetchall 的同时调用 userDirectoryFilesAddedOrChanged；
+      // ondemand 的页面用 wallpaperRequestRandomFileForProperty 一次要一个
+      const directoryFiles = {};
+      window.__wallpaperSetDirectoryFiles = (name, files) => { directoryFiles[name] = Array.isArray(files) ? files : []; };
+      window.wallpaperRequestRandomFileForProperty = (name, callback) => {
+        const files = directoryFiles[name] || [];
+        if (typeof callback !== 'function' || files.length === 0) return;
+        const file = files[Math.floor(Math.random() * files.length)];
+        setTimeout(() => {
+          try { callback(name, file); } catch (error) { post('console', 'error: wallpaperRequestRandomFileForProperty ' + describe(error)); }
+        }, 0);
+      };
+
+      // 这些文件的路径照 WE 的约定给（不带开头 "/" 的绝对路径），页面拼成 'file:///' + 路径来显示。可页面是从
+      // wallpaper:// 加载的，WebKit 不让它读 file:// 的文件：把页面里出现的 file: 地址改成同源的
+      // wallpaper://project/__wallpaper_files__/<路径>，原生一侧只放行目录类属性指向的文件夹（见 ProjectSchemeHandler）
+      const filePrefix = /^\s*file:\/*/i;
+      const userFilesBase = 'wallpaper://project/__wallpaper_files__/';
+      const rewriteURL = (value) =>
+        typeof value === 'string' && filePrefix.test(value) ? userFilesBase + value.replace(filePrefix, '') : value;
+      const rewriteCSS = (value) => typeof value === 'string' && /file:/i.test(value)
+        ? value.replace(/url\(\s*(['"]?)\s*file:\/*([^'")]*)\1\s*\)/gi, (_, quote, path) => `url(${quote}${userFilesBase}${path}${quote})`)
+        : value;
+      const wrapSetter = (prototype, property, rewrite) => {
+        const descriptor = prototype && Object.getOwnPropertyDescriptor(prototype, property);
+        if (!descriptor || !descriptor.set || !descriptor.configurable) return;
+        Object.defineProperty(prototype, property, {
+          configurable: true, enumerable: descriptor.enumerable, get: descriptor.get,
+          set(value) { descriptor.set.call(this, rewrite(value)); },
+        });
+      };
+      for (const prototype of [HTMLImageElement.prototype, HTMLMediaElement.prototype, HTMLSourceElement.prototype]) {
+        wrapSetter(prototype, 'src', rewriteURL);
+      }
+      wrapSetter(HTMLVideoElement.prototype, 'poster', rewriteURL);
+      // 样式属性的访问器不一定在 CSSStyleDeclaration.prototype 上（新的 WebKit 放在 element.style 自己的原型
+      // CSSStyleProperties 上），沿 element.style 的原型链找到定义它的那一层再包
+      const styleSample = document.createElement('div').style;
+      const definingPrototype = (object, property) => {
+        for (let prototype = Object.getPrototypeOf(object); prototype; prototype = Object.getPrototypeOf(prototype)) {
+          if (Object.getOwnPropertyDescriptor(prototype, property)) return prototype;
+        }
+        return null;
+      };
+      for (const property of [
+        'background', 'backgroundImage', 'background-image', 'cssText', 'content',
+        'borderImage', 'border-image', 'listStyleImage', 'list-style-image', 'webkitMaskImage',
+      ]) {
+        wrapSetter(definingPrototype(styleSample, property), property, rewriteCSS);
+      }
+      const setStyleProperty = CSSStyleDeclaration.prototype.setProperty;
+      CSSStyleDeclaration.prototype.setProperty = function (name, value, ...rest) {
+        return setStyleProperty.call(this, name, rewriteCSS(value), ...rest);
+      };
+      const setAttribute = Element.prototype.setAttribute;
+      Element.prototype.setAttribute = function (name, value) {
+        const attribute = String(name).toLowerCase();
+        if (attribute === 'src' || attribute === 'href' || attribute === 'poster') value = rewriteURL(value);
+        else if (attribute === 'style') value = rewriteCSS(value);
+        return setAttribute.call(this, name, value);
+      };
+      const nativeFetch = window.fetch;
+      if (typeof nativeFetch === 'function') {
+        window.fetch = (input, init) => nativeFetch.call(window, rewriteURL(input), init);
+      }
+      const nativeOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+        return nativeOpen.call(this, method, rewriteURL(url), ...rest);
+      };
 
       // 帧率上限与冻结。WE 按自己的 FPS 设置限制网页壁纸的渲染帧率，这里在页面脚本运行之前包一层
       // requestAnimationFrame 做同样的事；暂停时干脆不再派发回调，这样不理会 setPaused 的页面也会停下来。

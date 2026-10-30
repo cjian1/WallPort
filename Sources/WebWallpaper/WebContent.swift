@@ -16,6 +16,9 @@ public final class WebContent: NSObject, DesktopContent, UserPausable, AudioPlay
     private let webView: WKWebView
     private let entryPath: String
     private let userProperties: String
+    /// 目录类属性（幻灯片文件夹等），和载入前在后台读好的文件列表（见 `directoryScript`）
+    private let directoryProperties: [DirectoryProperty]
+    private var directoryFiles: [(property: DirectoryProperty, files: [String])] = []
     private let allowNetwork: Bool
     private let label: String
     private let log: EventLog
@@ -44,13 +47,15 @@ public final class WebContent: NSObject, DesktopContent, UserPausable, AudioPlay
     ///   - entry: 入口页面，必须位于 folder 之内
     ///   - userProperties: project.json 里 general.properties 的 JSON
     ///   - debugCapture: 开发用。设置后，页面加载完会测一次动画帧率，并把页面截图存到这个文件
+    ///   - propertyFolder: 目录类属性的相对路径相对于它。依赖型预设是预设自己的文件夹（页面在基础项目里），默认同 folder
     public init(
         folder: URL, entry: URL, userProperties: Data?, allowNetwork: Bool, label: String, log: EventLog,
-        debugCapture: URL? = nil
+        debugCapture: URL? = nil, propertyFolder: URL? = nil
     ) {
         let base = folder.standardizedFileURL.path + "/"
         entryPath = String(entry.standardizedFileURL.path.dropFirst(base.count))
         self.userProperties = userProperties.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        directoryProperties = Self.directoryProperties(in: self.userProperties, relativeTo: propertyFolder ?? folder)
         self.allowNetwork = allowNetwork
         self.label = label
         self.log = log
@@ -59,7 +64,9 @@ public final class WebContent: NSObject, DesktopContent, UserPausable, AudioPlay
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.mediaTypesRequiringUserActionForPlayback = []
-        configuration.setURLSchemeHandler(ProjectSchemeHandler(folder: folder), forURLScheme: ProjectSchemeHandler.scheme)
+        configuration.setURLSchemeHandler(
+            ProjectSchemeHandler(folder: folder, userDirectories: directoryProperties.map(\.folder)),
+            forURLScheme: ProjectSchemeHandler.scheme)
         configuration.userContentController.addUserScript(
             WKUserScript(
                 source: BridgeScript.source(frameRate: currentFrameRate),
@@ -157,7 +164,74 @@ public final class WebContent: NSObject, DesktopContent, UserPausable, AudioPlay
                 return
             }
         }
+        // 目录类属性的文件列表在后台读好（幻灯片文件夹可能有几百张），页面加载完和属性一起交给它
+        if !directoryProperties.isEmpty {
+            let properties = directoryProperties
+            directoryFiles = await Task.detached(priority: .userInitiated) {
+                properties.map { (property: $0, files: WebContent.files(in: $0.folder)) }
+            }.value
+            for (property, files) in directoryFiles {
+                log.write("\(label) 网页：目录属性 \(property.name) 有 \(files.count) 个文件（\(property.folder.path)）")
+            }
+        }
         load()
+    }
+
+    // MARK: - 目录类属性
+
+    /// 目录类属性：属性名、读法、对应的本机文件夹
+    struct DirectoryProperty: Equatable, Sendable {
+        let name: String
+        /// fetchall：载入时把全部文件交给页面；ondemand：页面要一个给一个（wallpaperRequestRandomFileForProperty）
+        let fetchesAll: Bool
+        let folder: URL
+    }
+
+    /// general.properties 里值是本机文件夹的目录类属性。相对路径相对于 `propertyFolder`：分享依赖型预设时，
+    /// WE 把选中的文件夹打包进预设自己的 directories/<属性名>，值写的就是这个相对路径。
+    /// 作者电脑上的 Windows 路径、不存在的文件夹跳过
+    nonisolated static func directoryProperties(in json: String, relativeTo propertyFolder: URL) -> [DirectoryProperty] {
+        guard let data = json.data(using: .utf8),
+              let properties = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return [] }
+        return properties.compactMap { name, value -> DirectoryProperty? in
+            guard let property = value as? [String: Any],
+                  (property["type"] as? String)?.lowercased() == "directory",
+                  let path = property["value"] as? String, !path.isEmpty, !path.contains("\\"),
+                  path.range(of: "^[A-Za-z]:", options: .regularExpression) == nil
+            else { return nil }
+            let folder = path.hasPrefix("/")
+                ? URL(fileURLWithPath: path, isDirectory: true)
+                : propertyFolder.appendingPathComponent(path, isDirectory: true)
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue
+            else { return nil }
+            let mode = (property["mode"] as? String)?.lowercased()
+            return DirectoryProperty(name: name, fetchesAll: mode != "ondemand", folder: folder.standardizedFileURL)
+        }
+        .sorted { $0.name < $1.name }
+    }
+
+    /// 交给页面的文件（见 `DirectoryFiles`）。路径是去掉开头 "/" 的绝对路径：页面照 WE 的写法拼 'file:///' + 路径
+    /// 正好是这个文件
+    nonisolated static func files(in folder: URL, limit: Int = 5000) -> [String] {
+        DirectoryFiles.list(in: folder, limit: limit).map { String($0.path.drop(while: { $0 == "/" })) }
+    }
+
+    /// 把目录类属性的文件列表交给页面。放在 applyUserProperties 之前：页面按属性开始轮播时列表里已经有图，
+    /// 不然像 Perfect Wallpaper（884307090）那样的要先显示默认壁纸，等一整个切换周期才换上第一张
+    private func directoryScript() -> String {
+        directoryFiles.map { property, files in
+            guard let name = Self.json(property.name), let list = Self.json(files) else { return "" }
+            return "window.__wallpaperSetDirectoryFiles(\(name), \(list));"
+                + (property.fetchesAll ? "window.__wallpaperApply('userDirectoryFilesAddedOrChanged', \(name), \(list));" : "")
+        }
+        .joined()
+    }
+
+    private static func json(_ value: Any) -> String? {
+        (try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed]))
+            .flatMap { String(data: $0, encoding: .utf8) }
     }
 
     private func load() {
@@ -285,6 +359,7 @@ extension WebContent: WKNavigationDelegate, WKUIDelegate {
         // 页面开头注入的兼容脚本是按默认帧率建的，加载完按当前设置改过来（加载前改的设置也要在这里补上）
         var script = "window.__wallpaperSetFrameRate(\(currentFrameRate));"
             + "window.__wallpaperApply('applyGeneralProperties', {\"fps\": \(currentFrameRate)});"
+            + directoryScript()
             + "window.__wallpaperApply('applyUserProperties', \(userProperties));"
             + "window.__wallpaperSetVolume(\(pageVolume));"
         if !gate.isPlaying { script += Self.pauseScript(paused: true) }

@@ -63,9 +63,10 @@ public final class VideoContent: DesktopContent, UserPausable, AudioPlaying, Fra
     }
 
     /// 壁纸设置里的显示方式：完整显示（两边留黑）或铺满（`position` 是被裁方向上看哪一部分，0 最左 / 最上）
-    public func setDisplay(fitsWhole: Bool, position: Float) {
+    public func setDisplay(fitsWhole: Bool, position: Float, scale: Float) {
         playerView.fitsWhole = fitsWhole
         playerView.position = CGFloat(min(max(position, 0), 1))
+        playerView.scale = CGFloat(scale)
     }
 
     /// 视频画面在屏幕上的宽高（带上旋转）；读不出来时为 nil，按默认的铺满放
@@ -143,7 +144,7 @@ public final class VideoContent: DesktopContent, UserPausable, AudioPlaying, Fra
             log.write("\(label) 视频：截取当前画面失败 \(error.localizedDescription)")
             return nil
         }
-        guard playerView.fitsWhole || playerView.position != 0.5 else { return frame }
+        guard playerView.fitsWhole || playerView.position != 0.5 || playerView.scale != 1 else { return frame }
         let scale = playerView.window?.backingScaleFactor ?? 2
         let bounds = playerView.bounds
         let place = playerView.playerLayer.frame
@@ -219,6 +220,9 @@ final class PlayerView: NSView {
     var position: CGFloat = 0.5 {
         didSet { if position != oldValue { needsLayout = true } }
     }
+    var scale: CGFloat = 1 {
+        didSet { if scale != oldValue { needsLayout = true } }
+    }
 
     init(player: AVPlayer) {
         playerLayer = AVPlayerLayer(player: player)
@@ -244,21 +248,16 @@ final class PlayerView: NSView {
         super.layout()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        playerLayer.frame = Self.videoFrame(in: bounds, video: videoSize, fitsWhole: fitsWhole, position: position)
+        playerLayer.frame = Self.videoFrame(
+            in: bounds, video: videoSize, fitsWhole: fitsWhole, position: position, scale: scale)
         CATransaction.commit()
     }
 
-    /// 画面那一层的位置（视图坐标，左下原点）。铺满：按大的那个比例放大，被裁的方向上 position 0 露出最左 / 最上；
-    /// 完整显示：按小的那个比例缩、居中
-    static func videoFrame(in bounds: CGRect, video: CGSize?, fitsWhole: Bool, position: CGFloat) -> CGRect {
-        guard let video, video.width > 0, video.height > 0, bounds.width > 0, bounds.height > 0 else { return bounds }
-        let ratio = (bounds.width / video.width, bounds.height / video.height)
-        let scale = fitsWhole ? min(ratio.0, ratio.1) : max(ratio.0, ratio.1)
-        let size = CGSize(width: (video.width * scale).rounded(), height: (video.height * scale).rounded())
-        let spare = CGSize(width: bounds.width - size.width, height: bounds.height - size.height)
-        let along = fitsWhole ? 0.5 : min(max(position, 0), 1)
-        return CGRect(
-            x: (spare.width * along).rounded(), y: (spare.height * (1 - along)).rounded(),
-            width: size.width, height: size.height)
+    /// 画面那一层的位置（视图坐标，左下原点，见 `Framing`）。还不知道画面宽高时按 AVPlayerLayer 自己的铺满居中
+    static func videoFrame(
+        in bounds: CGRect, video: CGSize?, fitsWhole: Bool, position: CGFloat, scale: CGFloat = 1
+    ) -> CGRect {
+        guard let video else { return bounds }
+        return Framing.frame(in: bounds, content: video, fitsWhole: fitsWhole, position: position, scale: scale)
     }
 }

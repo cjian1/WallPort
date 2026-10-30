@@ -79,11 +79,26 @@ private func project(_ folder: String, kind: String = "scene", file: String? = "
         let defaults = try #require(UserDefaults(suiteName: "PlaylistSettingsTests-\(UUID().uuidString)"))
         let store = PlaylistStore(defaults: defaults)
         #expect(store.settings == PlaylistSettings())
-        store.settings = PlaylistSettings(isEnabled: true, intervalMinutes: 5, mode: .random)
+        store.settings = PlaylistSettings(isEnabled: true, intervalSeconds: 10, mode: .random)
         #expect(store.settings.isEnabled)
-        #expect(store.settings.intervalMinutes == 5)
+        #expect(store.settings.intervalSeconds == 10)
         #expect(store.settings.mode == .random)
-        // 间隔至少 1 分钟
-        #expect(PlaylistSettings(intervalMinutes: 0).intervalMinutes == 1)
+        // 间隔至少 5 秒
+        #expect(PlaylistSettings(intervalSeconds: 0).intervalSeconds == PlaylistSettings.minimumIntervalSeconds)
+        #expect(PlaylistSettings(intervalSeconds: 30).intervalText == "30 秒")
+        #expect(PlaylistSettings(intervalSeconds: 300).intervalText == "5 分钟")
+    }
+
+    /// 以前按分钟存的设置换算成秒；存的时候分钟也写一份，换回旧版本还读得到
+    @Test func minuteSettingsFromOlderVersionsAreMigrated() throws {
+        let defaults = try #require(UserDefaults(suiteName: "PlaylistSettingsTests-\(UUID().uuidString)"))
+        defaults.set(["isEnabled": true, "intervalMinutes": 15, "mode": "random"], forKey: "playlistSettings")
+        let store = PlaylistStore(defaults: defaults)
+        #expect(store.settings == PlaylistSettings(isEnabled: true, intervalSeconds: 900, mode: .random))
+
+        store.settings = PlaylistSettings(isEnabled: true, intervalSeconds: 30, mode: .sequential)
+        let raw = try #require(defaults.dictionary(forKey: "playlistSettings"))
+        #expect((raw["intervalMinutes"] as? NSNumber)?.intValue == 1)
+        #expect((raw["intervalSeconds"] as? NSNumber)?.intValue == 30)
     }
 }

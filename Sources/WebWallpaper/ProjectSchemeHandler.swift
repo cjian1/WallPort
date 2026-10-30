@@ -7,18 +7,26 @@ import WebKit
 /// 不直接用 file:// 加载，是因为 file:// 页面里用 fetch/XHR 读同目录的文件会被 WebKit 拦下，
 /// 而不少网页壁纸（尤其是 WebGL 库的资源加载器）正是这样读贴图和配置的。
 /// 走自定义协议后这些请求是同源的，同时访问范围被限制在项目文件夹之内。
+///
+/// 目录类属性（例如幻灯片文件夹）里的文件挂在同源的 wallpaper://project/__wallpaper_files__/<绝对路径> 下，
+/// 只放行这几个文件夹里面的（兼容脚本把页面拼的 file:/// 地址改成这个，见 BridgeScript）
 @MainActor
 final class ProjectSchemeHandler: NSObject, WKURLSchemeHandler {
     nonisolated static let scheme = "wallpaper"
     nonisolated static let host = "project"
+    /// 目录类属性里的文件的路径前缀。和页面同源：页面把它们画进画布、WebGL 或者用 fetch 读时不碰跨域限制
+    nonisolated static let userFilesPrefix = "__wallpaper_files__/"
     /// 开放区间请求（bytes=0-，视频加载时常见）一次最多回这么多字节，否则会把整个视频读进内存。
     /// 回得少一些，WebKit 会按 Content-Range 接着要。不带 Range 的普通请求总是完整返回
     nonisolated static let maxChunk = 4 * 1024 * 1024
 
     private let folder: URL
+    /// 目录类属性指向的文件夹：页面可以读其中的文件
+    private let userDirectories: [URL]
 
-    init(folder: URL) {
+    init(folder: URL, userDirectories: [URL] = []) {
         self.folder = folder.standardizedFileURL
+        self.userDirectories = userDirectories.map(\.standardizedFileURL)
     }
 
     nonisolated static func url(for relativePath: String) -> URL? {
@@ -29,15 +37,24 @@ final class ProjectSchemeHandler: NSObject, WKURLSchemeHandler {
         return components.url
     }
 
-    /// 请求对应的项目内文件；越出项目文件夹、不存在或是目录时返回 nil。
+    /// 请求对应的项目内文件（或目录类属性文件夹里的文件）；越出这些文件夹、不存在或是目录时返回 nil。
     /// 比较的是展开符号链接以后的真实路径：壁纸文件夹里放一个指向外面的链接（例如指向 ~ 的），
     /// 只按字面路径比较的话网页就能顺着它读到用户别的文件。指向文件夹里面的链接、文件夹本身是链接，照常可用
-    nonisolated static func file(for url: URL, in folder: URL) -> URL? {
+    nonisolated static func file(for url: URL, in folder: URL, userDirectories: [URL] = []) -> URL? {
         guard url.scheme == scheme, url.host == host else { return nil }
         let relative = String(url.path.drop(while: { $0 == "/" }))
         guard !relative.isEmpty else { return nil }
-        let base = folder.resolvingSymlinksInPath().standardizedFileURL
-        let file = base.appendingPathComponent(relative).resolvingSymlinksInPath().standardizedFileURL
+        if relative.hasPrefix(userFilesPrefix) {
+            let candidate = URL(fileURLWithPath: "/" + relative.dropFirst(userFilesPrefix.count))
+            return userDirectories.lazy.compactMap { file(candidate, inside: $0) }.first
+        }
+        return file(folder.appendingPathComponent(relative), inside: folder)
+    }
+
+    /// `file` 展开符号链接以后在 `base` 里面、存在、不是目录时返回它
+    nonisolated private static func file(_ file: URL, inside base: URL) -> URL? {
+        let base = base.resolvingSymlinksInPath().standardizedFileURL
+        let file = file.resolvingSymlinksInPath().standardizedFileURL
         guard file.path.hasPrefix(base.path + "/") else { return nil }
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: file.path, isDirectory: &isDirectory), !isDirectory.boolValue
@@ -56,7 +73,7 @@ final class ProjectSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     func webView(_ webView: WKWebView, start task: any WKURLSchemeTask) {
-        guard let url = task.request.url, let file = Self.file(for: url, in: folder) else {
+        guard let url = task.request.url, let file = Self.file(for: url, in: folder, userDirectories: userDirectories) else {
             respond(task, status: 404, headers: [:], body: Data())
             return
         }

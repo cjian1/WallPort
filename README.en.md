@@ -53,7 +53,7 @@ After you sign in, WallPort downloads Wallpaper Engine's built-in assets from St
 <td valign="top">
 
 **🖥️ Multiple displays and rotation**<br>
-A different wallpaper on each display, with optional rotation. The colors, switches and sliders wallpaper authors provide can be adjusted directly.
+A different wallpaper on each display, with optional rotation (every few seconds or minutes). The colors, switches and sliders wallpaper authors provide can be adjusted directly. Images and videos can fill the screen or show whole, be repositioned and zoomed proportionally; slideshow presets that ship an image folder are played by WallPort itself, switching as often as every few seconds.
 
 </td>
 </tr>

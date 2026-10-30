@@ -105,4 +105,38 @@ import Testing
         #expect(ProjectSchemeHandler.mimeType(for: URL(fileURLWithPath: "a.wasm")) == "application/wasm")
         #expect(ProjectSchemeHandler.mimeType(for: URL(fileURLWithPath: "a.png")) == "image/png")
     }
+
+    /// 目录类属性的文件夹（例如预设自己的幻灯片文件夹）在 __wallpaper_files__/<绝对路径> 下能读，
+    /// 别处的文件、顺着链接或 .. 出去的都不行
+    @Test func userDirectoryFilesResolveOnlyInsideAllowedFolders() throws {
+        let manager = FileManager.default
+        let slides = folder.deletingLastPathComponent()
+            .appendingPathComponent("ProjectFileResolutionTests-slides-\(UUID().uuidString)", isDirectory: true)
+        try manager.createDirectory(at: slides.appendingPathComponent("子目录"), withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: slides) }
+        try Data("jpg".utf8).write(to: slides.appendingPathComponent("0001 图.jpg"))
+        try Data("jpg".utf8).write(to: slides.appendingPathComponent("子目录/0002.jpg"))
+        let secret = folder.deletingLastPathComponent()
+            .appendingPathComponent("ProjectFileResolutionTests-secret-\(UUID().uuidString).txt")
+        try Data("secret".utf8).write(to: secret)
+        defer { try? manager.removeItem(at: secret) }
+        try manager.createSymbolicLink(at: slides.appendingPathComponent("leak.jpg"), withDestinationURL: secret)
+
+        func resolve(_ file: URL) -> String? {
+            var components = URLComponents()
+            components.scheme = ProjectSchemeHandler.scheme
+            components.host = ProjectSchemeHandler.host
+            components.path = "/" + ProjectSchemeHandler.userFilesPrefix + file.path.drop(while: { $0 == "/" })
+            return ProjectSchemeHandler.file(for: components.url!, in: folder, userDirectories: [slides])?.lastPathComponent
+        }
+        #expect(resolve(slides.appendingPathComponent("0001 图.jpg")) == "0001 图.jpg")
+        #expect(resolve(slides.appendingPathComponent("子目录/0002.jpg")) == "0002.jpg")
+        #expect(resolve(secret) == nil)
+        #expect(resolve(slides.appendingPathComponent("leak.jpg")) == nil)
+        #expect(resolve(slides.appendingPathComponent("../" + secret.lastPathComponent)) == nil)
+        // 没开放任何目录时这个前缀下什么都读不到，也不会退回去当项目文件
+        let url = try #require(ProjectSchemeHandler.url(
+            for: ProjectSchemeHandler.userFilesPrefix + slides.appendingPathComponent("0001 图.jpg").path.dropFirst()))
+        #expect(ProjectSchemeHandler.file(for: url, in: folder) == nil)
+    }
 }

@@ -15,7 +15,10 @@ func webCapture(folder: String, output: String, size: CGSize) async -> Int32 {
     NSApp.setActivationPolicy(.prohibited)
     let project: WallpaperProject
     do {
-        project = try WallpaperProject(folder: URL(fileURLWithPath: folder, isDirectory: true))
+        // 依赖型预设：到它所在的文件夹和创意工坊下载目录里找基础项目
+        let folderURL = URL(fileURLWithPath: folder, isDirectory: true)
+        project = try WallpaperProject(folder: folderURL)
+            .resolvingDependency(in: [folderURL.deletingLastPathComponent()] + Workshop.downloadDirectories)
     } catch {
         print("✗ 读不了项目：\(error.localizedDescription)")
         return 1
@@ -28,7 +31,7 @@ func webCapture(folder: String, output: String, size: CGSize) async -> Int32 {
     let log = EventLog(fileURL: outputURL.deletingPathExtension().appendingPathExtension("log"))
     let content = WebContent(
         folder: project.contentFolder, entry: entry, userProperties: project.userPropertiesJSON(overrides: [:]),
-        allowNetwork: true, label: "web-capture", log: log)
+        allowNetwork: true, label: "web-capture", log: log, propertyFolder: project.folder)
     let window = NSWindow(
         contentRect: NSRect(origin: CGPoint(x: -20000, y: -20000), size: size), styleMask: .borderless,
         backing: .buffered, defer: false)

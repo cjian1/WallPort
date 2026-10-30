@@ -155,6 +155,8 @@ final class LibraryModel: ObservableObject {
     let onUnsubscribeItem: (String) -> Void
     /// 场景里可以关掉的内容、有没有声音对象，按项目缓存（场景包只读一次，设置栏每次刷新都读也没必要）
     private var sceneCache: [String: (elements: [SceneElement], hasSound: Bool)] = [:]
+    /// 网页预设的幻灯片图片张数（0 表示不是幻灯片）；要读一遍图片文件夹，按项目记下来
+    private var slideshowCache: [String: Int] = [:]
     /// 这个壁纸自己的播放选项（静音、音量、显示方式）
     let wallpaperOptions: (WallpaperProject) -> WallpaperOptions
     /// 播放选项改了
@@ -246,6 +248,7 @@ final class LibraryModel: ObservableObject {
         projects.removeAll { Self.key($0.folder) == key }
         workshop.updateLocalItems(from: projects)
         sceneCache[key] = nil
+        slideshowCache[key] = nil
         if selectedKey == key { selectedKey = nil }
     }
 
@@ -390,6 +393,20 @@ final class LibraryModel: ObservableObject {
     }
 
     /// 铺满当前选中的屏幕时会裁掉多少（场景按画布、视频按画面尺寸）；比例差不多（2% 以内）或者不适用时为 nil
+    /// 带图片文件夹的网页预设：壁坞能自己放的图片张数；不是幻灯片时为 nil
+    func slideshowImageCount(for project: WallpaperProject) -> Int? {
+        guard project.kind == .web else { return nil }
+        let key = Self.key(project.folder)
+        let count = slideshowCache[key] ?? project.slideshowImages(overrides: overrides(project)).count
+        slideshowCache[key] = count
+        return count > 0 ? count : nil
+    }
+
+    /// 能等比缩小 / 放大的类型：图片、视频（幻灯片在设置里按是否由壁坞播放另外判断）
+    func supportsScale(_ project: WallpaperProject) -> Bool {
+        project.kind == .image || project.kind == .video || slideshowImageCount(for: project) != nil
+    }
+
     func crop(for project: WallpaperProject) -> Crop? {
         guard project.kind == .scene || project.kind == .video || project.kind == .image,
               let details = details[project.folder.path], !details.isDynamic,
@@ -726,7 +743,9 @@ struct LibrarySettingsPanel: View {
                         options: model.wallpaperOptions(project),
                         playback: PlaybackOptionsContext(
                             hasAudio: model.hasAudio(project), playsAudio: model.playsAudio,
-                            crop: model.crop(for: project), onEnableAudio: model.onEnableAudio),
+                            crop: model.crop(for: project), supportsScale: model.supportsScale(project),
+                            slideshowImageCount: model.slideshowImageCount(for: project),
+                            onEnableAudio: model.onEnableAudio),
                         onChange: { name, value in model.onPropertyChange(project, name, value) },
                         onElementChange: { id, hidden in model.onElementChange(project, id, hidden) },
                         onOptionsChange: { options in model.onOptionsChange(project, options) },

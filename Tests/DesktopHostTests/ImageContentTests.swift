@@ -72,13 +72,13 @@ import Testing
         let imageLayer = try #require(content.view.layer?.sublayers?.first)
         #expect(imageLayer.frame == CGRect(x: -2, y: 0, width: 8, height: 4))
 
-        adjustable.setDisplay(fitsWhole: false, position: 0)
+        adjustable.setDisplay(fitsWhole: false, position: 0, scale: 1)
         content.view.layoutSubtreeIfNeeded()
         #expect(imageLayer.frame == CGRect(x: 0, y: 0, width: 8, height: 4))
-        adjustable.setDisplay(fitsWhole: false, position: 1)
+        adjustable.setDisplay(fitsWhole: false, position: 1, scale: 1)
         content.view.layoutSubtreeIfNeeded()
         #expect(imageLayer.frame == CGRect(x: -4, y: 0, width: 8, height: 4))
-        adjustable.setDisplay(fitsWhole: true, position: 1)
+        adjustable.setDisplay(fitsWhole: true, position: 1, scale: 1)
         content.view.layoutSubtreeIfNeeded()
         #expect(imageLayer.frame == CGRect(x: 0, y: 1, width: 4, height: 2))
     }

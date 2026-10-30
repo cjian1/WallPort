@@ -179,6 +179,28 @@ import WallpaperLibrary
         }
     }
 
+    /// 幻灯片由壁坞播放时："幻灯片"一节（间隔的数字、单位、随机）和"显示"一节（位置、缩放）都放得进右侧栏
+    @Test func slideshowOptionsFitThePanel() async throws {
+        let options = WallpaperOptions(
+            position: 0.3, scale: 1.4, playsSlidesNatively: true, slideInterval: 30, shufflesSlides: true)
+        let view = Form {
+            PlaybackOptionsSections(
+                options: .constant(options),
+                context: PlaybackOptionsContext(hasAudio: true, supportsScale: true, slideshowImageCount: 127))
+        }
+        .formStyle(.grouped)
+        .frame(width: Self.panelWidth, height: 620)
+        let window = Self.host(view, size: CGSize(width: Self.panelWidth, height: 620))
+        defer { window.close() }
+        try? await Task.sleep(for: .milliseconds(200))
+        window.contentView?.layoutSubtreeIfNeeded()
+        Self.snapshot(window, name: "slideshow-options")
+        for element in Self.elements(in: window) {
+            let frame = element.frame.insetBy(dx: 0.5, dy: 0.5)
+            #expect(frame.minX >= 0 && frame.maxX <= Self.panelWidth, "\(element.name) 超出右侧栏 \(element.frame.integral)")
+        }
+    }
+
     /// 底栏始终一行：好几项下载失败（内容服务器回 503 这种长原因）、几十个在等、暂停着，都不能把底栏撑高、挤出窗口
     @Test(arguments: [false, true])
     func statusBarStaysOneLine(paused: Bool) async throws {

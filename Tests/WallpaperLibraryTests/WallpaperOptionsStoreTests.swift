@@ -24,4 +24,24 @@ import Testing
         #expect(store.options(for: first) == WallpaperOptions())
         #expect((defaults.dictionary(forKey: "wallpaperOptions") ?? [:]).count == 1, "恢复默认的不占地方")
     }
+
+    /// 旧版本存的选项没有缩放、幻灯片这些后来加的字段：照样读出来，缺的用默认值（不能整个读不出来、把静音之类丢掉）
+    @Test func optionsSavedByOlderVersionsKeepTheirValues() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("WallpaperOptions-\(UUID().uuidString)").path
+        let defaults = try #require(UserDefaults(suiteName: path))
+        defer { try? FileManager.default.removeItem(atPath: path + ".plist") }
+        let folder = URL(fileURLWithPath: "/tmp/wallpapers/old", isDirectory: true)
+        let old = Data(#"{"isMuted":true,"volume":0.4,"fitsWhole":true,"position":0.25}"#.utf8)
+        defaults.set([folder.standardizedFileURL.path: old], forKey: "wallpaperOptions")
+
+        let options = WallpaperOptionsStore(defaults: defaults).options(for: folder)
+        #expect(options == WallpaperOptions(isMuted: true, volume: 0.4, fitsWhole: true, position: 0.25))
+        #expect(options.scale == 1 && options.playsSlidesNatively && options.slideInterval == 60 && !options.shufflesSlides)
+    }
+
+    @Test func scaleAndSlideIntervalAreClamped() {
+        #expect(WallpaperOptions(scale: 9).clampedScale == 2)
+        #expect(WallpaperOptions(scale: 0.1).clampedScale == 0.5)
+        #expect(WallpaperOptions(slideInterval: 0.5).clampedSlideInterval == 2)
+    }
 }

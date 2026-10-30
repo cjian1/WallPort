@@ -13,13 +13,22 @@ public struct PlaylistSettings: Equatable, Sendable {
     }
 
     public var isEnabled: Bool
-    public var intervalMinutes: Int
+    /// 多少秒换一张（菜单里有秒、分钟两种档位）
+    public var intervalSeconds: Int
     public var mode: Mode
 
-    public init(isEnabled: Bool = false, intervalMinutes: Int = 30, mode: Mode = .sequential) {
+    /// 最短间隔：换整张壁纸（场景要重建）太快没有意义
+    public static let minimumIntervalSeconds = 5
+
+    public init(isEnabled: Bool = false, intervalSeconds: Int = 30 * 60, mode: Mode = .sequential) {
         self.isEnabled = isEnabled
-        self.intervalMinutes = max(1, intervalMinutes)
+        self.intervalSeconds = max(Self.minimumIntervalSeconds, intervalSeconds)
         self.mode = mode
+    }
+
+    /// 日志里的写法："30 秒"、"5 分钟"
+    public var intervalText: String {
+        intervalSeconds >= 60 && intervalSeconds % 60 == 0 ? "\(intervalSeconds / 60) 分钟" : "\(intervalSeconds) 秒"
     }
 }
 
@@ -35,15 +44,19 @@ public final class PlaylistStore: @unchecked Sendable {
     public var settings: PlaylistSettings {
         get {
             guard let raw = defaults.dictionary(forKey: key) else { return PlaylistSettings() }
+            // 以前按分钟存（intervalMinutes），没有按秒的值就换算过来
+            let seconds = (raw["intervalSeconds"] as? NSNumber)?.intValue
+                ?? ((raw["intervalMinutes"] as? NSNumber)?.intValue).map { $0 * 60 } ?? 30 * 60
             return PlaylistSettings(
                 isEnabled: raw["isEnabled"] as? Bool ?? false,
-                intervalMinutes: (raw["intervalMinutes"] as? NSNumber)?.intValue ?? 30,
+                intervalSeconds: seconds,
                 mode: (raw["mode"] as? String).flatMap(PlaylistSettings.Mode.init(rawValue:)) ?? .sequential)
         }
         set {
+            // 分钟也写一份：换回旧版本时还读得到（不足一分钟按一分钟）
             defaults.set(
-                ["isEnabled": newValue.isEnabled, "intervalMinutes": newValue.intervalMinutes,
-                 "mode": newValue.mode.rawValue],
+                ["isEnabled": newValue.isEnabled, "intervalSeconds": newValue.intervalSeconds,
+                 "intervalMinutes": max(1, newValue.intervalSeconds / 60), "mode": newValue.mode.rawValue],
                 forKey: key)
         }
     }
