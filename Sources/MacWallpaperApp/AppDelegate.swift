@@ -434,6 +434,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = item
     }
 
+    /// 有框在等回应（模态）时点菜单栏图标：菜单里的项全是灰的、连退出都点不了，壁坞又没有 Dock 图标，
+    /// 框被别的窗口盖住就找不回来了——这时不展开菜单，把那个框提到最前面（见 `runModal`）
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu === statusItem?.menu, NSApp.modalWindow != nil else { return }
+        NSApp.activate()
+        bringModalWindowForward()
+        menu.perform(#selector(NSMenu.cancelTrackingWithoutAnimation), with: nil, afterDelay: 0, inModes: [.eventTracking])
+    }
+
     /// 每次打开菜单时重建，保证勾选状态和显示器列表是最新的
     func menuNeedsUpdate(_ menu: NSMenu) {
         guard let controller else { return }
@@ -660,8 +669,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.message = String(localized: "为「\(display.name)」选择一个视频")
         panel.allowedContentTypes = [.movie]
         panel.allowsMultipleSelection = false
-        NSApp.activate()
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard runModal(panel) == .OK, let url = panel.url else { return }
 
         Task {
             if let reason = await VideoContent.unplayableReason(for: url) {
@@ -684,8 +692,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        NSApp.activate()
-        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        guard runModal(panel) == .OK, let folder = panel.url else { return }
 
         let project: WallpaperProject
         do {
@@ -856,8 +863,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let delete = alert.addButton(withTitle: String(localized: "移到废纸篓"))
         delete.hasDestructiveAction = true
         alert.addButton(withTitle: String(localized: "取消"))
-        NSApp.activate()
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard runModal(alert) == .alertFirstButtonReturn else { return }
         guard moveToTrash([project.folder]) else { return }
         if let workshopID, alert.suppressionButton?.state == .on {
             unsubscribeOnSteam(workshopID, title: project.title)
@@ -955,8 +961,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.informativeText = String(localized: "会在 Steam 上取消订阅。")
         alert.addButton(withTitle: String(localized: "取消订阅")).hasDestructiveAction = true
         alert.addButton(withTitle: String(localized: "保留"))
-        NSApp.activate()
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard runModal(alert) == .alertFirstButtonReturn else { return }
         Task { [self] in
             switch await workshop.setSubscribed(false, id: id) {
             case .done: break
@@ -982,8 +987,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let button = alert.addButton(withTitle: String(localized: "取消订阅"))
         button.hasDestructiveAction = true
         alert.addButton(withTitle: String(localized: "保留"))
-        NSApp.activate()
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard runModal(alert) == .alertFirstButtonReturn else { return }
         unsubscribe(project, id: id)
     }
 
@@ -1031,8 +1035,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.informativeText = String(localized: "它们是之前从创意工坊下到这台 Mac 的，后来在 Steam 上取消了订阅。要移到废纸篓吗？（只处理创意工坊下载目录里的，你自己拷来的壁纸不动）")
         alert.addButton(withTitle: String(localized: "移到废纸篓"))
         alert.addButton(withTitle: String(localized: "保留"))
-        NSApp.activate()
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard runModal(alert) == .alertFirstButtonReturn else { return }
         moveToTrash(folders)
     }
 
@@ -1250,8 +1253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.addButton(withTitle: blocker == nil ? String(localized: "下载并更新") : String(localized: "下载"))
         alert.addButton(withTitle: String(localized: "以后再说"))
         alert.addButton(withTitle: String(localized: "跳过这个版本"))
-        NSApp.activate()
-        switch alert.runModal() {
+        switch runModal(alert) {
         case .alertFirstButtonReturn:
             if blocker == nil { downloadUpdate(update, installImmediately: true) } else { NSWorkspace.shared.open(update.url) }
         case .alertThirdButtonReturn: AppFolder.settings.set(update.version, forKey: Self.skippedUpdateKey)
@@ -1301,8 +1303,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     + String(localized: "可以到下载页手动下载，把新的\(MainMenu.appName)拖进「应用程序」替换旧的。")
                 alert.addButton(withTitle: String(localized: "打开下载页"))
                 alert.addButton(withTitle: String(localized: "好"))
-                NSApp.activate()
-                if alert.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(update.url) }
+                if runModal(alert) == .alertFirstButtonReturn { NSWorkspace.shared.open(update.url) }
             }
         }
     }
@@ -1316,8 +1317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.addButton(withTitle: String(localized: "现在更新"))
         alert.addButton(withTitle: String(localized: "退出时更新"))
         alert.addButton(withTitle: String(localized: "跳过这个版本"))
-        NSApp.activate()
-        switch alert.runModal() {
+        switch runModal(alert) {
         case .alertFirstButtonReturn:
             installUpdate(prepared)
         case .alertSecondButtonReturn:
@@ -1387,8 +1387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.nameFieldStringValue = String(localized: "\(MainMenu.appName)诊断信息-\(formatter.string(from: Date())).zip")
         panel.directoryURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
         panel.message = String(localized: "日志里的 Steam 账号名和你的用户名会被去掉；登录信息不会导出")
-        NSApp.activate()
-        guard panel.runModal() == .OK, let zip = panel.url else { return }
+        guard runModal(panel) == .OK, let zip = panel.url else { return }
         let summary = diagnosticsSummary()
         let prefix = "workshop.subscribedIDs."
         let accounts = [workshop.accountName, AppFolder.settings.string(forKey: WorkshopModel.lastAccountKey)].compactMap { $0 }
@@ -1470,8 +1469,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = true
-        NSApp.activate()
-        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+        guard runModal(panel) == .OK, !panel.urls.isEmpty else { return }
         for url in panel.urls { libraryFolders.add(url) }
         log.write("壁纸库：添加 \(panel.urls.map(\.lastPathComponent).joined(separator: "、"))")
         welcomeModel?.libraryFolderCount = libraryFolders.folders.count
@@ -1691,7 +1689,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.allowsMultipleSelection = false
         panel.message = String(localized: "选一张锁屏时显示的图片。锁屏、调度中心等时候系统壁纸会换成它；桌面上的动态壁纸不受影响。")
         panel.prompt = String(localized: "用作锁屏壁纸")
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard runModal(panel) == .OK, let url = panel.url else { return }
         lockScreenWallpaperPath = url.path
         log.write("锁屏壁纸：\(url.path)")
     }
@@ -1724,8 +1722,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let alert = NSAlert()
             alert.messageText = String(localized: "没能装上壁坞的屏幕保护程序")
             alert.informativeText = error.localizedDescription
-            NSApp.activate()
-            alert.runModal()
+            runModal(alert)
             return
         }
         guard !ScreenSaverSetup.isSelected() else {
@@ -1737,8 +1734,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.informativeText = String(localized: "接下来打开系统设置的「屏幕保护程序」，在「其他」里选「壁坞」。之后电脑空闲、锁屏和唤醒时显示的就是动态壁纸当前的画面，不再是系统自带的壁纸。")
         alert.addButton(withTitle: String(localized: "打开系统设置"))
         alert.addButton(withTitle: String(localized: "稍后"))
-        NSApp.activate()
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard runModal(alert) == .alertFirstButtonReturn else { return }
         NSWorkspace.shared.open(ScreenSaverSetup.settingsURL)
     }
 
@@ -1932,8 +1928,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.message = String(localized: "选择从 Windows 上 Wallpaper Engine 安装目录拷来的 assets 文件夹（场景壁纸要用里面的着色器和贴图）")
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
-        NSApp.activate()
-        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        guard runModal(panel) == .OK, let folder = panel.url else { return }
         guard let source = WallpaperEngineAssets.locate(in: folder) else {
             showAlert(
                 String(localized: "这不是 Wallpaper Engine 的 assets 文件夹"),
@@ -2010,7 +2005,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let alert = NSAlert()
         alert.messageText = message
         alert.informativeText = detail
+        runModal(alert)
+    }
+
+    // MARK: - 模态框
+
+    /// 弹模态框（提示框、打开 / 存储面板）等用户回应。壁坞平时不在前台：macOS 14 起 `NSApp.activate()` 只是请求，
+    /// 没有用户操作时系统不给（macOS 27 上实测 `activate(ignoringOtherApps:)` 也不给），检查更新这种等完网络、
+    /// 后台下载好才弹的框，弹出来时壁坞多半不在前台。这时开着壁纸库（临时是普通应用）的话，框会被放在普通层、
+    /// 压在别的 App 的窗口后面；模态期间菜单栏菜单又整个变灰、连退出都点不了，看着就像卡死了。
+    /// 所以框一出来就提到最前面；之后再被盖住（普通应用被切走时 AppKit 会把框降回普通层），点菜单栏图标也会提回来（见 `menuWillOpen`）
+    @discardableResult
+    private func runModal(_ alert: NSAlert) -> NSApplication.ModalResponse {
+        prepareModal()
+        defer { finishModal() }
+        return alert.runModal()
+    }
+
+    private func runModal(_ panel: NSSavePanel) -> NSApplication.ModalResponse {
+        prepareModal()
+        defer { finishModal() }
+        return panel.runModal()
+    }
+
+    private func prepareModal() {
         NSApp.activate()
-        alert.runModal()
+        // 模态期间主线程只处理模态模式的事件，排进主队列的任务要等框关掉才跑，所以挂在模态模式上：框一出来就执行
+        perform(#selector(bringModalWindowForward), with: nil, afterDelay: 0.05, inModes: [.modalPanel])
+    }
+
+    private func finishModal() {
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(bringModalWindowForward), object: nil)
+    }
+
+    /// 把等回应的模态框放回模态层、提到所有窗口前面（壁坞不在前台也行）
+    @objc private func bringModalWindowForward() {
+        guard let modal = NSApp.modalWindow else { return }
+        if modal.level < .modalPanel { modal.level = .modalPanel }
+        modal.orderFrontRegardless()
     }
 }
