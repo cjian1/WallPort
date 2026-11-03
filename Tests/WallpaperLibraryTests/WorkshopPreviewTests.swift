@@ -5,7 +5,7 @@ import Testing
 import UniformTypeIdentifiers
 @testable import WallpaperLibrary
 
-/// 网格里的预览图只要第一帧：GIF 动图下到第一帧完整就停，别的格式下整张
+/// 网格里的预览图只要一帧：GIF 动图下到有一帧完整、看得见就停，别的格式下整张；第一帧是空帧时往后找
 @Suite struct WorkshopPreviewTests {
     /// 服务器假装支持按字节范围取，记下每次要了哪一段
     private final class RangeServer: HTTPClient, @unchecked Sendable {
@@ -33,60 +33,171 @@ import UniformTypeIdentifiers
         }
     }
 
-    /// 自己画的多帧 GIF：每帧是不同的噪点（压不小），整张比第一帧大很多
-    private func animatedGIF(frames: Int, size: Int = 160) throws -> Data {
+    private static let thumbnailSize = 64
+
+    /// 一帧图：`pixel(x, y)` 给出 RGBA
+    private func image(size: Int, pixel: (Int, Int) -> (UInt8, UInt8, UInt8, UInt8)) throws -> CGImage {
+        let context = try #require(CGContext(
+            data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: size * 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let pixels = try #require(context.data).bindMemory(to: UInt8.self, capacity: size * size * 4)
+        for y in 0..<size {
+            for x in 0..<size {
+                let (r, g, b, a) = pixel(x, y)
+                let offset = (y * size + x) * 4
+                pixels[offset] = r; pixels[offset + 1] = g; pixels[offset + 2] = b; pixels[offset + 3] = a
+            }
+        }
+        return try #require(context.makeImage())
+    }
+
+    private func solid(size: Int = 160, _ r: UInt8, _ g: UInt8, _ b: UInt8, alpha: UInt8 = 255) throws -> CGImage {
+        try image(size: size) { _, _ in (r, g, b, alpha) }
+    }
+
+    /// 噪点（压不小）：每帧约 25 KB（160 边长）
+    private func noise(size: Int = 160, seed: UInt32) throws -> CGImage {
+        var state = seed
+        return try image(size: size) { _, _ in
+            state = state &* 1_664_525 &+ 1_013_904_223
+            return (UInt8(state >> 24), UInt8((state >> 16) & 0xFF), UInt8((state >> 8) & 0xFF), 255)
+        }
+    }
+
+    private func gif(_ frames: [CGImage]) throws -> Data {
         let output = NSMutableData()
         let destination = try #require(CGImageDestinationCreateWithData(
-            output as CFMutableData, UTType.gif.identifier as CFString, frames, nil))
-        var seed: UInt32 = 12345
-        for _ in 0..<frames {
-            var pixels = [UInt8](repeating: 0, count: size * size * 4)
-            for i in stride(from: 0, to: pixels.count, by: 4) {
-                seed = seed &* 1_664_525 &+ 1_013_904_223
-                pixels[i] = UInt8(seed >> 24); pixels[i + 1] = UInt8((seed >> 16) & 0xFF); pixels[i + 2] = UInt8((seed >> 8) & 0xFF)
-                pixels[i + 3] = 255
-            }
-            let context = try #require(CGContext(
-                data: &pixels, width: size, height: size, bitsPerComponent: 8, bytesPerRow: size * 4,
-                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-            CGImageDestinationAddImage(destination, try #require(context.makeImage()), nil)
-        }
+            output as CFMutableData, UTType.gif.identifier as CFString, frames.count, nil))
+        for frame in frames { CGImageDestinationAddImage(destination, frame, nil) }
         #expect(CGImageDestinationFinalize(destination))
         return output as Data
     }
 
-    @Test func gifFirstFrameEndsWellBeforeTheFile() throws {
-        let gif = try animatedGIF(frames: 8)
-        let end = try #require(WorkshopPreview.gifFirstFrameEnd(in: gif))
-        #expect(end < gif.count / 4)
-        // 前面这一段就能解出完整的第一帧
-        let source = try #require(CGImageSourceCreateWithData(gif.prefix(end) as CFData, nil))
-        #expect(CGImageSourceCreateImageAtIndex(source, 0, nil)?.width == 160)
+    private func jpeg(_ image: CGImage) throws -> Data {
+        let output = NSMutableData()
+        let destination = try #require(CGImageDestinationCreateWithData(
+            output as CFMutableData, UTType.jpeg.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 1.0] as CFDictionary)
+        #expect(CGImageDestinationFinalize(destination))
+        return output as Data
+    }
+
+    private func source(_ data: Data) throws -> CGImageSource {
+        try #require(CGImageSourceCreateWithData(data as CFData, nil))
+    }
+
+    /// 缩略图的平均颜色（0–255）
+    private func averageColor(_ image: CGImage) throws -> SIMD3<Double> {
+        let side = 8
+        let context = try #require(CGContext(
+            data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+        let pixels = try #require(context.data).bindMemory(to: UInt8.self, capacity: side * side * 4)
+        var sum = SIMD3<Double>()
+        for i in 0..<(side * side) {
+            sum += SIMD3(Double(pixels[i * 4]), Double(pixels[i * 4 + 1]), Double(pixels[i * 4 + 2]))
+        }
+        return sum / Double(side * side)
+    }
+
+    @Test func gifFrameEndsMarkEveryCompleteFrame() throws {
+        let gif = try gif((0..<8).map { try noise(seed: UInt32($0 + 1)) })
+        let ends = WorkshopPreview.gifFrameEnds(in: gif)
+        #expect(ends.count == 8)
+        #expect(ends[0] < gif.count / 4)
+        #expect(ends == ends.sorted())
+        // 第一帧结束之前的这一段就能解出完整的第一帧
+        let head = try source(gif.prefix(ends[0]))
+        #expect(CGImageSourceCreateImageAtIndex(head, 0, nil)?.width == 160)
         // 少一个字节就不算完整；不是 GIF 也不算
-        #expect(WorkshopPreview.gifFirstFrameEnd(in: gif.prefix(end - 1)) == nil)
-        #expect(WorkshopPreview.gifFirstFrameEnd(in: Data([0xFF, 0xD8, 0xFF, 0xE0] + [UInt8](repeating: 0, count: 20))) == nil)
+        #expect(WorkshopPreview.gifFrameEnds(in: gif.prefix(ends[0] - 1)).isEmpty)
+        #expect(WorkshopPreview.gifFrameEnds(in: gif.prefix(ends[2] + 5)).count == 3)
+        #expect(WorkshopPreview.gifFrameEnds(in: Data([0xFF, 0xD8, 0xFF, 0xE0] + [UInt8](repeating: 0, count: 20))).isEmpty)
+    }
+
+    @Test func blankMeansAlmostAllBlackOrTransparent() throws {
+        #expect(WorkshopPreview.isBlank(try solid(0, 0, 0)))
+        // 全透明（预乘了透明度，颜色也是 0）
+        #expect(WorkshopPreview.isBlank(try solid(0, 0, 0, alpha: 0)))
+        // 视频淡入那种很暗、但不是全黑的一帧也算空帧
+        #expect(WorkshopPreview.isBlank(try solid(16, 16, 16)))
+        #expect(!WorkshopPreview.isBlank(try solid(40, 40, 40)))
+        #expect(!WorkshopPreview.isBlank(try solid(255, 0, 0)))
+        // 黑底上一小块亮的（约 4% 的面积，夜景里的灯那种）：不是空帧
+        let lamp = try image(size: 160) { x, y in x < 32 && y < 32 ? (255, 220, 120, 255) : (0, 0, 0, 255) }
+        #expect(!WorkshopPreview.isBlank(lamp))
+    }
+
+    @Test func blankFirstFrameIsSkipped() throws {
+        // 视频壁纸的 GIF 预览：第一帧纯黑，第二帧起才有画面
+        let preview = try gif([try solid(0, 0, 0), try solid(200, 30, 30), try solid(30, 200, 30)])
+        let thumbnail = try #require(WorkshopPreview.thumbnail(of: try source(preview), maxPixelSize: Self.thumbnailSize))
+        #expect(!WorkshopPreview.isBlank(thumbnail))
+        let color = try averageColor(thumbnail)
+        #expect(color.x > 150 && color.y < 80, "该用第二帧（红色），实际平均颜色 \(color)")
+
+        // 第一帧本来就看得见：用第一帧
+        let normal = try gif([try solid(30, 30, 200), try solid(200, 30, 30)])
+        let first = try #require(WorkshopPreview.thumbnail(of: try source(normal), maxPixelSize: Self.thumbnailSize))
+        #expect(try averageColor(first).z > 150)
+    }
+
+    @Test func allBlankFramesFallBackToTheFirstFrame() throws {
+        let preview = try gif([try solid(0, 0, 0), try solid(0, 0, 0), try solid(5, 5, 5)])
+        let thumbnail = try #require(WorkshopPreview.thumbnail(of: try source(preview), maxPixelSize: Self.thumbnailSize))
+        #expect(WorkshopPreview.isBlank(thumbnail))
     }
 
     @Test func gifStopsAfterTheFirstRequestOtherFormatsFetchTheRest() async throws {
         // 每帧噪点约 25 KB，20 帧约 500 KB：第一帧在头 128 KB 里，一次就够
-        let gif = try animatedGIF(frames: 20)
-        #expect(gif.count > WorkshopPreview.firstRequestBytes)
-        let gifServer = RangeServer(body: gif, contentType: "image/gif")
-        let gifData = try await WorkshopPreview.data(for: URL(string: "https://example.invalid/a")!, client: gifServer)
+        let animated = try gif((0..<20).map { try noise(seed: UInt32($0 + 1)) })
+        #expect(animated.count > WorkshopPreview.firstRequestBytes)
+        let gifServer = RangeServer(body: animated, contentType: "image/gif")
+        let gifThumbnail = try await WorkshopPreview.thumbnail(
+            for: URL(string: "https://example.invalid/a")!, client: gifServer, maxPixelSize: Self.thumbnailSize)
         #expect(gifServer.ranges == ["bytes=0-131071"])
-        #expect(gifData.count == WorkshopPreview.firstRequestBytes)
+        #expect(gifThumbnail?.width == Self.thumbnailSize)
 
-        // 不是 GIF：再要剩下的，拼成整张
-        let other = Data((0..<300_000).map { UInt8($0 % 251) })
-        let otherServer = RangeServer(body: other, contentType: "image/jpeg")
-        let otherData = try await WorkshopPreview.data(for: URL(string: "https://example.invalid/b")!, client: otherServer)
-        #expect(otherServer.ranges == ["bytes=0-131071", "bytes=131072-"])
-        #expect(otherData == other)
+        // 不是 GIF（JPEG 要整张才解得出来）：再要剩下的，拼成整张
+        let photo = try jpeg(try noise(size: 600, seed: 7))
+        #expect(photo.count > WorkshopPreview.firstRequestBytes)
+        let jpegServer = RangeServer(body: photo, contentType: "image/jpeg")
+        let jpegThumbnail = try await WorkshopPreview.thumbnail(
+            for: URL(string: "https://example.invalid/b")!, client: jpegServer, maxPixelSize: Self.thumbnailSize)
+        #expect(jpegServer.ranges == ["bytes=0-131071", "bytes=131072-"])
+        #expect(jpegThumbnail?.width == Self.thumbnailSize)
 
         // 整张比第一次要的还小：一次就够
-        let small = Data(repeating: 7, count: 1000)
-        let smallServer = RangeServer(body: small, contentType: "image/png")
-        #expect(try await WorkshopPreview.data(for: URL(string: "https://example.invalid/c")!, client: smallServer) == small)
+        let small = try jpeg(try solid(size: 32, 10, 120, 200))
+        #expect(small.count < WorkshopPreview.firstRequestBytes)
+        let smallServer = RangeServer(body: small, contentType: "image/jpeg")
+        let smallThumbnail = try await WorkshopPreview.thumbnail(
+            for: URL(string: "https://example.invalid/c")!, client: smallServer, maxPixelSize: Self.thumbnailSize)
         #expect(smallServer.ranges.count == 1)
+        #expect(smallThumbnail != nil)
+    }
+
+    @Test func blankFirstFrameWithPictureInTheFirstRequestNeedsNoMore() async throws {
+        // 纯黑的第一帧只有几百字节，后面的帧也在头 128 KB 里：不用再下
+        let preview = try gif([try solid(0, 0, 0)] + (0..<20).map { try noise(seed: UInt32($0 + 1)) })
+        #expect(preview.count > WorkshopPreview.firstRequestBytes)
+        let server = RangeServer(body: preview, contentType: "image/gif")
+        let thumbnail = try await WorkshopPreview.thumbnail(
+            for: URL(string: "https://example.invalid/d")!, client: server, maxPixelSize: Self.thumbnailSize)
+        #expect(server.ranges == ["bytes=0-131071"])
+        #expect(!WorkshopPreview.isBlank(try #require(thumbnail)))
+    }
+
+    @Test func onlyBlankFramesInTheFirstRequestFetchesTheRest() async throws {
+        // 第二帧很大（480 边长的噪点，两百多 KB），头 128 KB 里只有纯黑的第一帧：要把剩下的也下回来
+        let preview = try gif([try solid(size: 480, 0, 0, 0), try noise(size: 480, seed: 3)])
+        let ends = WorkshopPreview.gifFrameEnds(in: preview)
+        #expect(ends.count == 2 && ends[0] < WorkshopPreview.firstRequestBytes && ends[1] > WorkshopPreview.firstRequestBytes)
+        let server = RangeServer(body: preview, contentType: "image/gif")
+        let thumbnail = try await WorkshopPreview.thumbnail(
+            for: URL(string: "https://example.invalid/e")!, client: server, maxPixelSize: Self.thumbnailSize)
+        #expect(server.ranges == ["bytes=0-131071", "bytes=131072-"])
+        #expect(!WorkshopPreview.isBlank(try #require(thumbnail)))
     }
 }

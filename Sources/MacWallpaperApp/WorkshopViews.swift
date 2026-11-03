@@ -332,8 +332,9 @@ struct ThumbnailImage: View {
 /// 按字节设上限（系统内存紧张时 NSCache 也会自己清），壁纸库窗口关掉时整个清空——
 /// 壁坞常驻后台，不能一直占着几百张缩略图的内存。
 ///
-/// 创意工坊的预览图：只下到能解出第一帧为止（见 `WorkshopPreview`，GIF 动图从 1 MB 降到几十 KB），
-/// 解好的缩略图另存一份在磁盘上（壁坞文件夹的 Cache/Thumbnails，几十 KB 一张），下次打开不用再下载
+/// 创意工坊的预览图：只下到能解出一帧看得见的为止（见 `WorkshopPreview`，GIF 动图从 1 MB 降到几十 KB），
+/// 解好的缩略图另存一份在磁盘上（壁坞文件夹的 Cache/Thumbnails，几十 KB 一张），下次打开不用再下载。
+/// 动图的第一帧是空帧（视频壁纸的 GIF 预览常是全黑的第一帧）时用后面那帧，本机的预览图也一样
 @MainActor
 final class ThumbnailCache {
     static let shared = ThumbnailCache()
@@ -366,23 +367,18 @@ final class ThumbnailCache {
             task = running
         } else {
             let client = client
-            let diskFile = url.isFileURL ? nil : diskDirectory.map { $0.appendingPathComponent(Self.diskName(url)) }
+            let diskDirectory = url.isFileURL ? nil : diskDirectory
             task = Task.detached(priority: .utility) { () -> CGImage? in
-                if let diskFile, let saved = Self.thumbnail(CGImageSourceCreateWithURL(diskFile as CFURL, nil)) {
-                    // 碰一下修改时间：清理时按它判断最近有没有用过
-                    try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: diskFile.path)
-                    return saved
-                }
-                let source: CGImageSource?
+                if let diskDirectory, let saved = Self.savedThumbnail(for: url, in: diskDirectory) { return saved }
+                let image: CGImage?
                 if url.isFileURL {
-                    source = CGImageSourceCreateWithURL(url as CFURL, nil)
-                } else if let data = try? await WorkshopPreview.data(for: url, client: client) {
-                    source = CGImageSourceCreateWithData(data as CFData, nil)
+                    image = CGImageSourceCreateWithURL(url as CFURL, nil)
+                        .flatMap { WorkshopPreview.thumbnail(of: $0, maxPixelSize: Self.maxPixelSize) }
                 } else {
-                    source = nil
+                    image = try? await WorkshopPreview.thumbnail(for: url, client: client, maxPixelSize: Self.maxPixelSize)
                 }
-                guard let image = Self.thumbnail(source) else { return nil }
-                if let diskFile { Self.save(image, to: diskFile) }
+                guard let image else { return nil }
+                if let diskDirectory { Self.save(image, to: diskDirectory.appendingPathComponent(Self.diskName(url))) }
                 return image
             }
             loading[url] = task
@@ -400,19 +396,52 @@ final class ThumbnailCache {
         images.removeAllObjects()
     }
 
-    private nonisolated static func thumbnail(_ source: CGImageSource?) -> CGImage? {
-        guard let source else { return nil }
+    /// 磁盘上存的缩略图。以前的版本总是取第一帧，第一帧是空帧（视频壁纸的 GIF 预览常是全黑的第一帧）也照样
+    /// 存成了一张黑图：旧文件看得见的改成新名字接着用，空的删掉重做（重做时会往后找看得见的帧）
+    nonisolated static func savedThumbnail(for url: URL, in directory: URL) -> CGImage? {
+        let file = directory.appendingPathComponent(diskName(url))
+        if let image = decode(file) {
+            touch(file)
+            return image
+        }
+        let legacy = directory.appendingPathComponent(legacyDiskName(url))
+        guard let image = decode(legacy) else { return nil }
+        guard !WorkshopPreview.isBlank(image) else {
+            try? FileManager.default.removeItem(at: legacy)
+            return nil
+        }
+        try? FileManager.default.moveItem(at: legacy, to: file)
+        touch(file)
+        return image
+    }
+
+    /// 读存下的缩略图（在后台线程解好，不留到主线程画的时候再解）
+    private nonisolated static func decode(_ file: URL) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(file as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-            kCGImageSourceCreateThumbnailWithTransform: true,
         ]
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
-    /// 地址 → 文件名（Steam 的预览图地址里带着内容的哈希，图换了地址也会换）
-    private nonisolated static func diskName(_ url: URL) -> String {
-        SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined() + ".jpg"
+    /// 碰一下修改时间：清理时按它判断最近有没有用过
+    private nonisolated static func touch(_ file: URL) {
+        try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: file.path)
+    }
+
+    /// 地址 → 文件名（Steam 的预览图地址里带着内容的哈希，图换了地址也会换）。
+    /// 末尾的 "-2" 是缩略图的取法：第一帧是空帧时往后找。和以前总取第一帧存下的（`legacyDiskName`）分开
+    nonisolated static func diskName(_ url: URL) -> String {
+        urlHash(url) + "-2.jpg"
+    }
+
+    nonisolated static func legacyDiskName(_ url: URL) -> String {
+        urlHash(url) + ".jpg"
+    }
+
+    private nonisolated static func urlHash(_ url: URL) -> String {
+        SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     private nonisolated static func save(_ image: CGImage, to file: URL) {
