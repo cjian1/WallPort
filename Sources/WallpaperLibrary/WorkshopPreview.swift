@@ -2,49 +2,103 @@ import CoreGraphics
 import Foundation
 import ImageIO
 
-/// 预览图的缩略图（创意工坊网格、本机壁纸库的卡片）：只要一帧，不用整张动图。
+/// 预览图（创意工坊网格、本机壁纸库的卡片）：先要一帧做缩略图，是 GIF 动图的话再接着下完整张让它动起来。
 ///
 /// 预览图一半以上是 GIF 动图，一张 0.6–1 MB，一帧却只有几十 KB（2026-10-01 量一页 30 张：GIF 的第一帧
 /// 32–112 KB，整页全下要 20 MB）。所以先要前 128 KB：是 GIF、而且下完的帧里已经有能看的一帧（按 GIF 的块结构判断
-/// 哪几帧完整）就到此为止；不是 GIF（JPEG 要整张才解得出来）或者还没有能看的帧，再把剩下的要回来。
+/// 哪几帧完整）就先拿它做缩略图，卡片马上有图；不是 GIF（JPEG 要整张才解得出来）或者还没有能看的帧，再把剩下的要回来。
+/// 要动起来时用 `remainder` 接着开头这一段把剩下的下完（2026-11-03 量一页 30 张：15 张 GIF 共 12 MB）。
 /// Steam 的图片服务器支持按字节范围取（206 Partial Content）
 ///
 /// **第一帧可能是空的**：不少视频壁纸的 GIF 预览第一帧是纯黑的（2026-11-03 量网格里 3 张黑卡片：第一帧平均亮度 0，
 /// 第二帧起 100–157；壁坞缓存的 1710 张缩略图里 64 张是这样的全黑图），只取第一帧的话网格里就是一块黑。
-/// 所以按顺序找第一帧看得见的（`isBlank`），前 `frameSearchLimit` 帧都是空的才用第一帧
+/// 所以按顺序找第一帧看得见的（`isBlank`），前 `frameSearchLimit` 帧都是空的才用第一帧；播放时也跳过开头的空帧
+/// （`leadingBlankFrames`），不然每一圈开头都黑一下
 public enum WorkshopPreview {
     /// 第一次要的字节数
     public static let firstRequestBytes = 128 * 1024
     /// 最多往后找几帧（GIF 预览一般 50 帧、每帧 0.04 秒；纯黑的第一帧只有几百字节，前 128 KB 里通常有六七帧）
     static let frameSearchLimit = 30
 
-    /// 下预览图并做成缩略图（长边不超过 `maxPixelSize`），够用就不再往下下。服务器不认范围请求时就是整张
-    public static func thumbnail(for url: URL, client: any HTTPClient, maxPixelSize: Int) async throws -> CGImage? {
+    /// 下好的预览：缩略图；原图是 GIF 时还有下到的数据——`isComplete` 为 false 时只是开头一段，
+    /// 要动起来得用 `remainder` 接着下完
+    public struct Fetched: Sendable {
+        public let thumbnail: CGImage
+        public let gif: Data?
+        public let isComplete: Bool
+    }
+
+    /// 下预览图并做成缩略图（长边不超过 `maxPixelSize`），够做缩略图就不再往下下。服务器不认范围请求时就是整张
+    public static func fetch(_ url: URL, client: any HTTPClient, maxPixelSize: Int) async throws -> Fetched? {
         var request = URLRequest(url: url)
         request.setValue("bytes=0-\(firstRequestBytes - 1)", forHTTPHeaderField: "Range")
         let (head, response) = try await client.data(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 206 else {
             try WorkshopCatalog.check(response)
-            return thumbnail(of: head, maxPixelSize: maxPixelSize)
+            return fetched(head, maxPixelSize: maxPixelSize)
         }
         // 整张就这么大：够了
-        if let total = totalLength(http), head.count >= total { return thumbnail(of: head, maxPixelSize: maxPixelSize) }
+        if let total = totalLength(http), head.count >= total { return fetched(head, maxPixelSize: maxPixelSize) }
         // GIF：下完的帧里有能看的一帧就够了；要找的帧都下完了、也都是空的，再往下下也没用
         let complete = gifFrameEnds(in: head).count
         if complete > 0, let source = CGImageSourceCreateWithData(head as CFData, nil),
            let pick = firstShowableFrame(of: source, frames: complete, maxPixelSize: maxPixelSize),
            pick.showable || complete >= frameSearchLimit {
-            return pick.image
+            return Fetched(thumbnail: pick.image, gif: head, isComplete: false)
         }
+        return fetched(try await remainder(of: head, url: url, client: client), maxPixelSize: maxPixelSize)
+    }
+
+    /// 整张数据做成的预览
+    private static func fetched(_ data: Data, maxPixelSize: Int) -> Fetched? {
+        guard let image = thumbnail(of: data, maxPixelSize: maxPixelSize) else { return nil }
+        return Fetched(thumbnail: image, gif: isGIF(data) ? data : nil, isComplete: true)
+    }
+
+    /// 接着已经下到的开头把剩下的下完。服务器这次不认范围请求、回了整张（200）时就用整张
+    public static func remainder(of head: Data, url: URL, client: any HTTPClient) async throws -> Data {
         var rest = URLRequest(url: url)
         rest.setValue("bytes=\(head.count)-", forHTTPHeaderField: "Range")
-        let (tail, tailResponse) = try await client.data(for: rest)
-        guard let tailHTTP = tailResponse as? HTTPURLResponse, tailHTTP.statusCode == 206 else {
-            // 第二次服务器给了整张：用整张
-            try WorkshopCatalog.check(tailResponse)
-            return thumbnail(of: tail, maxPixelSize: maxPixelSize)
+        let (tail, response) = try await client.data(for: rest)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 206 else {
+            try WorkshopCatalog.check(response)
+            return tail
         }
-        return thumbnail(of: head + tail, maxPixelSize: maxPixelSize)
+        return head + tail
+    }
+
+    /// 整张下载
+    public static func download(_ url: URL, client: any HTTPClient) async throws -> Data {
+        let (data, response) = try await client.data(for: URLRequest(url: url))
+        try WorkshopCatalog.check(response)
+        return data
+    }
+
+    /// 原图是不是 GIF：只要前 6 个字节（以前的版本只存了缩略图，不知道原图是什么）
+    public static func isGIF(at url: URL, client: any HTTPClient) async throws -> Bool {
+        var request = URLRequest(url: url)
+        request.setValue("bytes=0-5", forHTTPHeaderField: "Range")
+        let (head, response) = try await client.data(for: request)
+        try WorkshopCatalog.check(response)
+        return isGIF(head)
+    }
+
+    /// 文件头是 "GIF8"（GIF87a / GIF89a）
+    public static func isGIF(_ data: Data) -> Bool {
+        data.starts(with: [0x47, 0x49, 0x46, 0x38])
+    }
+
+    /// 动图开头有几帧是空帧（播放时跳过它们，不然每一圈开头都黑一下）；整张都是空帧、或者第一帧就看得见时是 0
+    public static func leadingBlankFrames(in source: CGImageSource) -> Int {
+        for index in 0..<min(CGImageSourceGetCount(source), frameSearchLimit) {
+            let options: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceThumbnailMaxPixelSize: 64,
+            ]
+            guard let image = CGImageSourceCreateThumbnailAtIndex(source, index, options as CFDictionary) else { continue }
+            if !isBlank(image) { return index }
+        }
+        return 0
     }
 
     /// 缩略图：第一帧看得见的（动图的第一帧是空帧时往后找），都是空的就用第一帧
@@ -52,7 +106,7 @@ public enum WorkshopPreview {
         firstShowableFrame(of: source, frames: CGImageSourceGetCount(source), maxPixelSize: maxPixelSize)?.image
     }
 
-    static func thumbnail(of data: Data, maxPixelSize: Int) -> CGImage? {
+    public static func thumbnail(of data: Data, maxPixelSize: Int) -> CGImage? {
         CGImageSourceCreateWithData(data as CFData, nil).flatMap { thumbnail(of: $0, maxPixelSize: maxPixelSize) }
     }
 

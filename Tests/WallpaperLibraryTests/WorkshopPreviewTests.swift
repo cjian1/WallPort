@@ -150,32 +150,43 @@ import UniformTypeIdentifiers
     }
 
     @Test func gifStopsAfterTheFirstRequestOtherFormatsFetchTheRest() async throws {
-        // 每帧噪点约 25 KB，20 帧约 500 KB：第一帧在头 128 KB 里，一次就够
+        // 每帧噪点约 25 KB，20 帧约 500 KB：第一帧在头 128 KB 里，一次就够；带回下到的这一段，要动起来时接着下
         let animated = try gif((0..<20).map { try noise(seed: UInt32($0 + 1)) })
         #expect(animated.count > WorkshopPreview.firstRequestBytes)
         let gifServer = RangeServer(body: animated, contentType: "image/gif")
-        let gifThumbnail = try await WorkshopPreview.thumbnail(
-            for: URL(string: "https://example.invalid/a")!, client: gifServer, maxPixelSize: Self.thumbnailSize)
+        let gifPreview = try #require(try await WorkshopPreview.fetch(
+            URL(string: "https://example.invalid/a")!, client: gifServer, maxPixelSize: Self.thumbnailSize))
         #expect(gifServer.ranges == ["bytes=0-131071"])
-        #expect(gifThumbnail?.width == Self.thumbnailSize)
+        #expect(gifPreview.thumbnail.width == Self.thumbnailSize)
+        #expect(gifPreview.gif == animated.prefix(WorkshopPreview.firstRequestBytes))
+        #expect(!gifPreview.isComplete)
 
         // 不是 GIF（JPEG 要整张才解得出来）：再要剩下的，拼成整张
         let photo = try jpeg(try noise(size: 600, seed: 7))
         #expect(photo.count > WorkshopPreview.firstRequestBytes)
         let jpegServer = RangeServer(body: photo, contentType: "image/jpeg")
-        let jpegThumbnail = try await WorkshopPreview.thumbnail(
-            for: URL(string: "https://example.invalid/b")!, client: jpegServer, maxPixelSize: Self.thumbnailSize)
+        let jpegPreview = try #require(try await WorkshopPreview.fetch(
+            URL(string: "https://example.invalid/b")!, client: jpegServer, maxPixelSize: Self.thumbnailSize))
         #expect(jpegServer.ranges == ["bytes=0-131071", "bytes=131072-"])
-        #expect(jpegThumbnail?.width == Self.thumbnailSize)
+        #expect(jpegPreview.thumbnail.width == Self.thumbnailSize)
+        #expect(jpegPreview.gif == nil)
 
         // 整张比第一次要的还小：一次就够
         let small = try jpeg(try solid(size: 32, 10, 120, 200))
         #expect(small.count < WorkshopPreview.firstRequestBytes)
         let smallServer = RangeServer(body: small, contentType: "image/jpeg")
-        let smallThumbnail = try await WorkshopPreview.thumbnail(
-            for: URL(string: "https://example.invalid/c")!, client: smallServer, maxPixelSize: Self.thumbnailSize)
+        let smallPreview = try await WorkshopPreview.fetch(
+            URL(string: "https://example.invalid/c")!, client: smallServer, maxPixelSize: Self.thumbnailSize)
         #expect(smallServer.ranges.count == 1)
-        #expect(smallThumbnail != nil)
+        #expect(smallPreview != nil)
+
+        // 小 GIF 一次就下完了：带回整张
+        let smallGIF = try gif([try solid(size: 32, 200, 30, 30), try solid(size: 32, 30, 200, 30)])
+        let smallGIFPreview = try #require(try await WorkshopPreview.fetch(
+            URL(string: "https://example.invalid/f")!, client: RangeServer(body: smallGIF, contentType: "image/gif"),
+            maxPixelSize: Self.thumbnailSize))
+        #expect(smallGIFPreview.gif == smallGIF)
+        #expect(smallGIFPreview.isComplete)
     }
 
     @Test func blankFirstFrameWithPictureInTheFirstRequestNeedsNoMore() async throws {
@@ -183,10 +194,10 @@ import UniformTypeIdentifiers
         let preview = try gif([try solid(0, 0, 0)] + (0..<20).map { try noise(seed: UInt32($0 + 1)) })
         #expect(preview.count > WorkshopPreview.firstRequestBytes)
         let server = RangeServer(body: preview, contentType: "image/gif")
-        let thumbnail = try await WorkshopPreview.thumbnail(
-            for: URL(string: "https://example.invalid/d")!, client: server, maxPixelSize: Self.thumbnailSize)
+        let fetched = try await WorkshopPreview.fetch(
+            URL(string: "https://example.invalid/d")!, client: server, maxPixelSize: Self.thumbnailSize)
         #expect(server.ranges == ["bytes=0-131071"])
-        #expect(!WorkshopPreview.isBlank(try #require(thumbnail)))
+        #expect(!WorkshopPreview.isBlank(try #require(fetched?.thumbnail)))
     }
 
     @Test func onlyBlankFramesInTheFirstRequestFetchesTheRest() async throws {
@@ -195,9 +206,39 @@ import UniformTypeIdentifiers
         let ends = WorkshopPreview.gifFrameEnds(in: preview)
         #expect(ends.count == 2 && ends[0] < WorkshopPreview.firstRequestBytes && ends[1] > WorkshopPreview.firstRequestBytes)
         let server = RangeServer(body: preview, contentType: "image/gif")
-        let thumbnail = try await WorkshopPreview.thumbnail(
-            for: URL(string: "https://example.invalid/e")!, client: server, maxPixelSize: Self.thumbnailSize)
+        let fetched = try #require(try await WorkshopPreview.fetch(
+            URL(string: "https://example.invalid/e")!, client: server, maxPixelSize: Self.thumbnailSize))
         #expect(server.ranges == ["bytes=0-131071", "bytes=131072-"])
-        #expect(!WorkshopPreview.isBlank(try #require(thumbnail)))
+        #expect(!WorkshopPreview.isBlank(fetched.thumbnail))
+        // 已经是整张了：动起来不用再下
+        #expect(fetched.gif == preview)
+        #expect(fetched.isComplete)
+    }
+
+    @Test func remainderContinuesFromTheHead() async throws {
+        let animated = try gif((0..<20).map { try noise(seed: UInt32($0 + 1)) })
+        let server = RangeServer(body: animated, contentType: "image/gif")
+        let head = animated.prefix(WorkshopPreview.firstRequestBytes)
+        let whole = try await WorkshopPreview.remainder(of: head, url: URL(string: "https://example.invalid/g")!, client: server)
+        #expect(server.ranges == ["bytes=131072-"])
+        #expect(whole == animated)
+    }
+
+    @Test func sniffingAsksForTheFirstBytesOnly() async throws {
+        let animated = try gif([try solid(200, 30, 30), try solid(30, 200, 30)])
+        let gifServer = RangeServer(body: animated, contentType: "image/gif")
+        #expect(try await WorkshopPreview.isGIF(at: URL(string: "https://example.invalid/h")!, client: gifServer))
+        #expect(gifServer.ranges == ["bytes=0-5"])
+        let photoServer = RangeServer(body: try jpeg(try solid(10, 120, 200)), contentType: "image/jpeg")
+        #expect(try await !WorkshopPreview.isGIF(at: URL(string: "https://example.invalid/i")!, client: photoServer))
+    }
+
+    @Test func leadingBlankFramesAreCounted() throws {
+        let fadeIn = try gif([try solid(0, 0, 0), try solid(4, 4, 4), try solid(200, 30, 30), try solid(0, 0, 0)])
+        // 中间、结尾的黑帧是画面本身（转场），只数开头的
+        #expect(WorkshopPreview.leadingBlankFrames(in: try source(fadeIn)) == 2)
+        #expect(WorkshopPreview.leadingBlankFrames(in: try source(try gif([try solid(200, 30, 30), try solid(0, 0, 0)]))) == 0)
+        // 整张都是空帧：不跳（跳光了就什么也不显示）
+        #expect(WorkshopPreview.leadingBlankFrames(in: try source(try gif([try solid(0, 0, 0), try solid(0, 0, 0)]))) == 0)
     }
 }
